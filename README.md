@@ -14,9 +14,8 @@ Building_Multi_Agent_AI_Systems_Book/
 ├── chapters/           # Book chapters in Markdown format (e.g., chapter_01.md)
 ├── images/             # Diagrams and illustrations (Optional)
 └── code/
-    ├── backend/        # FastAPI + SQLAlchemy backend
-    │   ├── main.py     # Backend API server
-    │   └── backend_data.db # SQLite database file (created on first run)
+    ├── backend/        # FastAPI backend with in-memory storage
+    │   └── main.py     # Backend API server with WebSocket support
     ├── frontend/       # Basic HTML/CSS/Bootstrap UI
     │   └── index.html  # Simple dashboard UI
     ├── mcp_server/     # Model Context Protocol server (runs via stdio)
@@ -85,8 +84,7 @@ Building_Multi_Agent_AI_Systems_Book/
 ## Core Dependencies
 
 *   **Python 3.10+**
-*   **FastAPI**: For the backend web API.
-*   **SQLAlchemy**: For database interaction (using SQLite initially).
+*   **FastAPI**: For the backend web API and WebSocket support.
 *   **Uvicorn**: ASGI server to run FastAPI.
 *   **mcp**: The Model Context Protocol library for server/client implementation.
 *   **Bootstrap 5**: For basic frontend styling.
@@ -94,14 +92,17 @@ Building_Multi_Agent_AI_Systems_Book/
 ## Project Components Overview
 
 ### Backend (`code/backend`)
-*   Provides a RESTful API (built with FastAPI) for potential future agent management, data storage, etc.
-*   Uses SQLAlchemy and a simple SQLite database (`backend_data.db`).
-*   Currently has a dummy `/api/agents` endpoint.
+*   Provides a RESTful API and WebSocket endpoints (built with FastAPI) for agent management and real-time communication.
+*   Uses in-memory storage for simplicity and fast access.
+*   Implements endpoints for agent management, messaging, and system metrics.
+*   Features WebSocket support for real-time chat functionality.
+*   Includes role-based response generation for different agent types.
 
 ### Frontend (`code/frontend`)
 *   A very basic HTML/CSS/JS frontend using Bootstrap.
-*   `index.html` shows placeholder sections for visualizing agents, tools, memory, and decisions.
-*   Intended to be expanded upon to interact with the backend and visualize agent states.
+*   `index.html` shows sections for visualizing agents, tools, memory, and decisions.
+*   Implements WebSocket-based chat interface for real-time agent communication.
+*   Displays system metrics and agent status.
 
 ### MCP Server (`code/mcp_server`)
 *   Implements an MCP server using the `mcp` library.

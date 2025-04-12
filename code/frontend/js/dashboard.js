@@ -1,6 +1,6 @@
 // API Configuration
 const API_CONFIG = {
-    BASE_URL: 'http://localhost:5001',  // Updated port to match backend
+    BASE_URL: 'http://localhost:8080',  // Updated port to match our backend
     ENDPOINTS: {
         AGENTS: '/api/agents',
         TASKS: '/api/tasks',

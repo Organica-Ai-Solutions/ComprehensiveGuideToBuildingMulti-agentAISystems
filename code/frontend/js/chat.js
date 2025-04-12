@@ -7,7 +7,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const protocol = window.location.protocol === 'https:' ? 'https' : 'http';
     const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
     const hostname = window.location.hostname || 'localhost';
-    const port = '5001'; // Backend server port
+    const port = '8000'; // Updated backend server port
     
     // Ensure we have our own API_CONFIG in this file
     const API_CONFIG = {
@@ -177,13 +177,29 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     
     function toggleContextPanel() {
+        const contextPanel = document.getElementById('context-panel');
+        const chatLayout = document.querySelector('.chat-layout');
+        const contextToggleBtn = document.getElementById('context-toggle-btn');
+        
+        if (!contextPanel) return;
+        
+        // Add animation class
+        contextPanel.classList.add('animating');
+        
+        // Toggle collapsed state
         contextPanel.classList.toggle('collapsed');
         
         if (contextPanel.classList.contains('collapsed')) {
             // Context panel is now collapsed
             chatLayout.classList.remove('show-context');
             
-            if (!sidebar.classList.contains('collapsed')) {
+            // Update toggle button icon
+            if (contextToggleBtn) {
+                contextToggleBtn.innerHTML = '<i class="bi bi-layout-sidebar-reverse"></i>';
+                contextToggleBtn.title = "Show Context Panel";
+            }
+            
+            if (!document.getElementById('sidebar').classList.contains('collapsed')) {
                 // Sidebar is expanded
                 chatLayout.classList.add('show-sidebar');
             }
@@ -191,11 +207,32 @@ document.addEventListener('DOMContentLoaded', async () => {
             // Context panel is now expanded
             chatLayout.classList.add('show-context');
             
-            if (!sidebar.classList.contains('collapsed')) {
+            // Reset minimized state when showing
+            contextPanel.classList.remove('minimized');
+            
+            // Update button icon if needed
+            const contextMinimizeBtn = document.getElementById('context-minimize');
+            if (contextMinimizeBtn) {
+                contextMinimizeBtn.innerHTML = '<i class="bi bi-arrows-angle-contract"></i>';
+                contextMinimizeBtn.title = 'Minimize panel';
+            }
+            
+            // Update toggle button icon
+            if (contextToggleBtn) {
+                contextToggleBtn.innerHTML = '<i class="bi bi-layout-sidebar-inset-reverse"></i>';
+                contextToggleBtn.title = "Hide Context Panel";
+            }
+            
+            if (!document.getElementById('sidebar').classList.contains('collapsed')) {
                 // Both panels are expanded
                 chatLayout.classList.add('show-both');
             }
         }
+        
+        // Remove animation class after transition
+        setTimeout(() => {
+            contextPanel.classList.remove('animating');
+        }, 300);
         
         // Force redraw to ensure layout updates
         setTimeout(() => {
@@ -215,6 +252,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     sidebarClose?.addEventListener('click', toggleSidebar);
     document.getElementById('context-close')?.addEventListener('click', toggleContextPanel);
     contextToggleBtn?.addEventListener('click', toggleContextPanel);
+    
+    // Initialize the enhanced context panel
+    initializeContextPanel();
     
     // --- Theme Toggle ---
     function initializeTheme() {
@@ -367,7 +407,14 @@ document.addEventListener('DOMContentLoaded', async () => {
             return;
         }
         
+        // Clear both sidebar tools bar and header tools bar
         toolsBar.innerHTML = '<div class="mb-2">Click on a tool to use it</div>';
+        
+        // Also populate the header tools bar if it exists
+        const headerToolsBar = document.getElementById('header-tools-bar');
+        if (headerToolsBar) {
+            headerToolsBar.innerHTML = '';
+        }
         
         // Tool icons with colors
         const iconMap = {
@@ -383,6 +430,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         };
         
         tools.forEach(tool => {
+            // Create tool div for sidebar
             const toolDiv = document.createElement('div');
             toolDiv.className = 'tool-icon';
             
@@ -400,6 +448,20 @@ document.addEventListener('DOMContentLoaded', async () => {
             });
             
             toolsBar.appendChild(toolDiv);
+            
+            // Also add to header tools bar if it exists
+            if (headerToolsBar) {
+                const headerToolButton = document.createElement('button');
+                headerToolButton.className = `btn btn-icon btn-sm tool-header-icon`;
+                headerToolButton.title = tool.name;
+                headerToolButton.innerHTML = `<i class="bi ${iconInfo.icon} text-${iconInfo.color}"></i>`;
+                
+                headerToolButton.addEventListener('click', () => {
+                    showToolModal(tool);
+                });
+                
+                headerToolsBar.appendChild(headerToolButton);
+            }
         });
     }
     
@@ -449,29 +511,132 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     // --- Context and Reasoning Display ---
     function updateContextChain(nodes) {
-        contextChain.innerHTML = '<h6 class="section-title">Context Chain</h6>';
-        nodes.forEach(node => {
+        // Get the content container
+        const contextChainContent = document.getElementById('context-chain-content');
+        if (!contextChainContent) return;
+        
+        // If nodes is not provided or empty, add a default message
+        if (!nodes || nodes.length === 0) {
+            contextChainContent.innerHTML = `
+                <div class="text-center text-muted my-3">
+                    <i class="bi bi-info-circle"></i>
+                    <p>Context information will appear here during the conversation.</p>
+                </div>
+            `;
+            return;
+        }
+        
+        // Clear existing content
+        contextChainContent.innerHTML = '';
+        
+        // Create a container for horizontal scrolling
+        const nodesContainer = document.createElement('div');
+        nodesContainer.className = 'context-nodes-container d-flex gap-2 overflow-auto pb-2';
+        
+        nodes.forEach((node, index) => {
             const nodeDiv = document.createElement('div');
             nodeDiv.className = 'context-node';
+            
+            // Determine appropriate icon based on node type
+            let icon = 'bi-circle';
+            if (node.type.toLowerCase().includes('user')) {
+                icon = 'bi-person';
+            } else if (node.type.toLowerCase().includes('agent')) {
+                icon = 'bi-robot';
+            } else if (node.type.toLowerCase().includes('tool')) {
+                icon = 'bi-tools';
+            } else if (node.type.toLowerCase().includes('memory')) {
+                icon = 'bi-database';
+            } else if (node.type.toLowerCase().includes('context')) {
+                icon = 'bi-layers';
+            }
+            
             nodeDiv.innerHTML = `
-                <small class="text-muted">${node.type}</small>
-                <p>${node.content}</p>
+                <i class="bi ${icon}"></i>
+                <span>${node.type}</span>
+                <div class="context-node-tooltip">${node.content.substring(0, 100)}${node.content.length > 100 ? '...' : ''}</div>
             `;
-            contextChain.appendChild(nodeDiv);
+            
+            // Add click handler to show full content
+            nodeDiv.addEventListener('click', () => {
+                // Get the reasoning steps content container
+                const reasoningStepsContent = document.getElementById('reasoning-steps-content');
+                if (reasoningStepsContent) {
+                    // Update reasoning steps with this context
+                    reasoningStepsContent.innerHTML = `
+                        <div class="context-detail p-3">
+                            <h6>${node.type}</h6>
+                            <p>${node.content}</p>
+                        </div>
+                    `;
+                    
+                    // Make sure reasoning steps section is visible
+                    const reasoningStepsSection = document.getElementById('reasoning-steps');
+                    if (reasoningStepsSection.classList.contains('collapsed')) {
+                        const toggleBtn = reasoningStepsSection.querySelector('.toggle-section');
+                        if (toggleBtn) toggleBtn.click();
+                    }
+                    
+                    // If reasoning steps section is hidden by the header toggle, show it
+                    if (reasoningStepsSection.classList.contains('d-none')) {
+                        const headerToggleBtn = document.getElementById('toggle-reasoning');
+                        if (headerToggleBtn) headerToggleBtn.click();
+                    }
+                }
+                
+                // Mark this node as active and others as inactive
+                document.querySelectorAll('.context-node').forEach(n => n.classList.remove('active'));
+                nodeDiv.classList.add('active');
+            });
+            
+            nodesContainer.appendChild(nodeDiv);
         });
+        
+        contextChainContent.appendChild(nodesContainer);
+        
+        // Auto-scroll to the end of the context chain
+        setTimeout(() => {
+            nodesContainer.scrollLeft = nodesContainer.scrollWidth;
+        }, 100);
     }
     
     function addReasoningStep(step) {
+        // Get the reasoning steps content container
+        const reasoningStepsContent = document.getElementById('reasoning-steps-content');
+        if (!reasoningStepsContent) return;
+        
         const stepDiv = document.createElement('div');
         stepDiv.className = 'reasoning-step';
         stepDiv.innerHTML = `
             <small class="text-muted">Step ${step.step_number}</small>
             <p>${step.content}</p>
         `;
-        reasoningSteps.appendChild(stepDiv);
+        reasoningStepsContent.appendChild(stepDiv);
+        
+        // Make sure reasoning steps section is visible
+        const reasoningStepsSection = document.getElementById('reasoning-steps');
+        if (reasoningStepsSection.classList.contains('collapsed')) {
+            const toggleBtn = reasoningStepsSection.querySelector('.toggle-section');
+            if (toggleBtn) toggleBtn.click();
+        }
+        
+        // If reasoning steps section is hidden by the header toggle, show it
+        if (reasoningStepsSection.classList.contains('d-none')) {
+            const headerToggleBtn = document.getElementById('toggle-reasoning');
+            if (headerToggleBtn) headerToggleBtn.click();
+        }
+        
+        // Show the context panel if it's collapsed
+        if (contextPanel.classList.contains('collapsed')) {
+            toggleContextPanel();
+        }
     }
     
     function addToolUsage(usage) {
+        // Get the tool usage content container
+        const toolUsageContent = document.getElementById('tool-usage-content');
+        if (!toolUsageContent) return;
+        
         const usageDiv = document.createElement('div');
         usageDiv.className = 'tool-usage-item';
         usageDiv.innerHTML = `
@@ -479,7 +644,25 @@ document.addEventListener('DOMContentLoaded', async () => {
             <p>Input: ${usage.input_data}</p>
             <p>Output: ${usage.output_data}</p>
         `;
-        toolUsage.appendChild(usageDiv);
+        toolUsageContent.appendChild(usageDiv);
+        
+        // Make sure tool usage section is visible
+        const toolUsageSection = document.getElementById('tool-usage');
+        if (toolUsageSection.classList.contains('collapsed')) {
+            const toggleBtn = toolUsageSection.querySelector('.toggle-section');
+            if (toggleBtn) toggleBtn.click();
+        }
+        
+        // If tool usage section is hidden by the header toggle, show it
+        if (toolUsageSection.classList.contains('d-none')) {
+            const headerToggleBtn = document.getElementById('toggle-tools');
+            if (headerToggleBtn) headerToggleBtn.click();
+        }
+        
+        // Show the context panel if it's collapsed
+        if (contextPanel.classList.contains('collapsed')) {
+            toggleContextPanel();
+        }
     }
     
     // Add tool usage to UI after agent uses a tool
@@ -515,11 +698,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                         input_data: inputData,
                         output_data: outputData
                     });
-                    
-                    // Also show context panel if it's collapsed
-                    if (contextPanel.classList.contains('collapsed')) {
-                        toggleContextPanel();
-                    }
                 }
             }
         }
@@ -527,8 +705,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     // Extract reasoning steps from message
     function extractAndDisplayReasoningSteps(message) {
+        // Get the reasoning steps content container
+        const reasoningStepsContent = document.getElementById('reasoning-steps-content');
+        if (!reasoningStepsContent) return;
+        
         // Clear existing steps
-        reasoningSteps.innerHTML = '<h6 class="section-title">Reasoning Steps</h6>';
+        reasoningStepsContent.innerHTML = '';
         
         // Look for numbered steps
         const steps = message.match(/Step \d+:([^\n]+)/g) || 
@@ -542,11 +724,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                     content: stepContent
                 });
             });
-            
-            // Show context panel
-            if (contextPanel.classList.contains('collapsed')) {
-                toggleContextPanel();
-            }
         } else {
             // Try to identify steps by keywords
             const sentences = message.split(/\.\s+/);
@@ -567,13 +744,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                         });
                     }
                 });
-                
-                // Only show if we found multiple steps
-                if (stepNumber > 2) {
-                    if (contextPanel.classList.contains('collapsed')) {
-                        toggleContextPanel();
-                    }
-                }
             }
         }
     }
@@ -628,9 +798,14 @@ document.addEventListener('DOMContentLoaded', async () => {
                     const data = JSON.parse(event.data);
                     console.log("WebSocket message received:", data);
                     
-                    if (data.type === 'agent_message') {
-                        // Skip if no message content
-                        if (!data.content) return;
+                    // More verbose logging to debug exact message structure
+                    console.log("Message type:", data.type);
+                    console.log("Message content:", data.content);
+                    console.log("Message sender:", data.sender);
+                    
+                    if (data.type === 'message' && data.sender === 'agent') {
+                        // Handle agent message
+                        console.log("Received agent message");
                         
                         // Check if message contains tool usage
                         if (data.tool_usage) {
@@ -648,12 +823,21 @@ document.addEventListener('DOMContentLoaded', async () => {
                         }
                         
                         addAgentMessage(data.content);
-                    } else if (data.type === 'system_message') {
+                    } else if (data.type === 'system') {
+                        // Handle system message
+                        console.log("Received system message:", data.content);
                         addSystemMessage(data.content, data.message_type || 'info');
                     } else if (data.type === 'thinking') {
                         // Show thinking indicator
+                        console.log("Agent is thinking...");
                     } else if (data.type === 'error') {
                         handleWebSocketError(data);
+                    } else {
+                        // Fallback for any other message type
+                        console.log("Received unknown message type:", data.type);
+                        if (data.content) {
+                            addAgentMessage(data.content);
+                        }
                     }
                 } catch (error) {
                     console.error("Error processing WebSocket message:", error, event.data);
@@ -669,7 +853,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (wsConnectionAttempts < MAX_RECONNECT_ATTEMPTS) {
                     scheduleReconnect();
                 } else if (wsConnectionAttempts >= MAX_RECONNECT_ATTEMPTS) {
-                    addSystemMessage("Could not establish connection to the backend server. Please check if the server is running on port 5001.", "error");
+                    addSystemMessage(`Could not establish connection to the backend server. Please check if the server is running on port ${API_CONFIG.WS_URL.split(':')[2] || 8080}.`, "error");
                     console.log("Max reconnection attempts reached, giving up.");
                 }
             };
@@ -763,11 +947,43 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Add user message to UI immediately
         addUserMessage(messageText);
         
+        // Check if WebSocket is connected - use that if possible
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            console.log("Sending message via WebSocket");
+            try {
+                // Send via WebSocket
+                ws.send(JSON.stringify({
+                    type: 'message',
+                    content: messageText,
+                    agent_id: currentAgentId,
+                    sender: 'user',
+                    model: currentModel
+                }));
+                
+                // Add a small delay to simulate thinking
+                setTimeout(() => {
+                    // No need to re-enable input immediately, it will be enabled when the response is received
+                    sendButton.innerHTML = '<i class="bi bi-send-fill"></i>';
+                }, 500);
+                
+                // Note: We're not setting isProcessing = false here because we're
+                // waiting for the response via WebSocket
+                
+                return; // Exit early if sent via WebSocket
+            } catch (wsError) {
+                console.error("WebSocket send error:", wsError);
+                // Fall back to REST API below if WebSocket fails
+            }
+        }
+        
+        // If WebSocket is not available or fails, use REST API
+        console.log("Using REST API fallback");
         try {
             const response = await fetch(`${API_CONFIG.BASE_URL}/api/agents/${currentAgentId}/messages`, {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
                 },
                 body: JSON.stringify({
                     agent_id: currentAgentId,
@@ -777,19 +993,35 @@ document.addEventListener('DOMContentLoaded', async () => {
                 })
             });
             
-            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            if (!response.ok) {
+                throw new Error(`HTTP error ${response.status}: ${response.statusText}`);
+            }
+            
+            // Process the response
             const data = await response.json();
+            console.log("REST API response:", data);
+            
+            // Display reasoning steps if present
+            if (data.reasoning_steps && data.reasoning_steps.length > 0) {
+                data.reasoning_steps.forEach(step => addReasoningStep(step));
+            }
+            
+            // Check if the response contains tool usage
+            if (data.tool_usage) {
+                addToolUsage(data.tool_usage);
+            }
+            
+            // Add agent response to chat
             addAgentMessage(data.content);
+            
         } catch (error) {
-            console.error('Error sending message:', error);
-            showError('chat-messages', `Failed to send message: ${error.message}`);
+            console.error("Error sending message:", error);
+            addSystemMessage(`Failed to send message: ${error.message}. Please try again.`, "error");
         } finally {
-            // Reset UI state
             isProcessing = false;
             messageInput.disabled = false;
             sendButton.disabled = false;
-            sendButton.innerHTML = '<i class="bi bi-send"></i>';
-            messageInput.focus();
+            sendButton.innerHTML = '<i class="bi bi-send-fill"></i>';
         }
     }
     
@@ -902,21 +1134,64 @@ document.addEventListener('DOMContentLoaded', async () => {
             console.log("Loading initial data...");
             addSystemMessage("Connecting to backend...", "info");
             
+            // Check if the API_CONFIG is properly set
+            if (!API_CONFIG || !API_CONFIG.BASE_URL) {
+                throw new Error("API configuration is missing or invalid. Check if base.js is loaded correctly.");
+            }
+            
+            console.log("Using API config:", API_CONFIG);
+            
+            // Check backend connectivity first
+            try {
+                const pingResponse = await fetch(`${API_CONFIG.BASE_URL}/api/agents`, {
+                    method: 'HEAD',
+                    headers: { 'Accept': 'application/json' },
+                    mode: 'cors',
+                    cache: 'no-cache'
+                });
+                
+                if (!pingResponse.ok) {
+                    const statusMessage = pingResponse.status === 404 ? 'API endpoint not found' : 
+                                         pingResponse.status === 500 ? 'Server error' :
+                                         `Error code: ${pingResponse.status}`;
+                    
+                    addSystemMessage(`Backend connection issue: ${statusMessage}. Using offline mode with simulated data.`, "warning");
+                    console.warn(`Backend connectivity check failed: ${pingResponse.status} ${pingResponse.statusText}`);
+                    
+                    // Load default/simulated data
+                    loadSimulatedData();
+                    return;
+                }
+            } catch (connectionError) {
+                console.error("Backend connectivity check failed:", connectionError);
+                addSystemMessage(`Cannot connect to backend at ${API_CONFIG.BASE_URL}. Check if the server is running. Using offline mode.`, "error");
+                
+                // Load default/simulated data
+                loadSimulatedData();
+                return;
+            }
+            
             // Load agents
             let agents = [];
             try {
                 console.log("Fetching agents from:", `${API_CONFIG.BASE_URL}/api/agents`);
-                const agentsResponse = await fetch(`${API_CONFIG.BASE_URL}/api/agents`);
+                const agentsResponse = await fetch(`${API_CONFIG.BASE_URL}/api/agents`, {
+                    headers: { 'Accept': 'application/json' },
+                    mode: 'cors',
+                    cache: 'no-cache'
+                });
+                
                 if (!agentsResponse.ok) {
                     throw new Error(`Error fetching agents: ${agentsResponse.status} ${agentsResponse.statusText}`);
                 }
+                
                 agents = await agentsResponse.json();
                 console.log("Agents loaded:", agents);
                 activeAgents = agents;
                 displayAgents(agents);
             } catch (error) {
                 console.error("Error loading agents:", error);
-                addSystemMessage("Could not load agents. Backend server may be down or inaccessible. Using default agents instead.", "warning");
+                addSystemMessage(`Could not load agents. Backend server may be down or inaccessible. Using default agents instead.`, "warning");
                 
                 // Add default agents for UI testing
                 const defaultAgents = [
@@ -933,17 +1208,23 @@ document.addEventListener('DOMContentLoaded', async () => {
             // Load tools
             try {
                 console.log("Fetching tools from:", `${API_CONFIG.BASE_URL}/api/tools`);
-                const toolsResponse = await fetch(`${API_CONFIG.BASE_URL}/api/tools`);
+                const toolsResponse = await fetch(`${API_CONFIG.BASE_URL}/api/tools`, {
+                    headers: { 'Accept': 'application/json' },
+                    mode: 'cors',
+                    cache: 'no-cache'
+                });
+                
                 if (!toolsResponse.ok) {
                     throw new Error(`Error fetching tools: ${toolsResponse.status} ${toolsResponse.statusText}`);
                 }
+                
                 const tools = await toolsResponse.json();
                 console.log("Tools loaded:", tools);
                 availableTools = tools;
                 displayToolIcons(tools);
             } catch (error) {
                 console.error("Error loading tools:", error);
-                addSystemMessage("Could not load tools. Using default tools instead.", "warning");
+                addSystemMessage(`Could not load tools. Using default tools instead.`, "warning");
                 
                 // Add default tools for UI testing
                 const defaultTools = [
@@ -962,7 +1243,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (currentAgentId) {
                 console.log("Fetching messages for agent:", currentAgentId);
                 try {
-                    const messagesResponse = await fetch(`${API_CONFIG.BASE_URL}/api/agents/${currentAgentId}/messages`);
+                    const messagesResponse = await fetch(`${API_CONFIG.BASE_URL}/api/agents/${currentAgentId}/messages`, {
+                        headers: { 'Accept': 'application/json' },
+                        mode: 'cors',
+                        cache: 'no-cache'
+                    });
+                    
                     if (messagesResponse.ok) {
                         const messages = await messagesResponse.json();
                         
@@ -985,11 +1271,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                         }
                     } else {
                         // If we can't load messages, just show a welcome message
+                        console.warn(`Failed to load messages: ${messagesResponse.status} ${messagesResponse.statusText}`);
                         addSystemMessage(`Connected to agent. Start a conversation!`);
                     }
                 } catch (error) {
                     console.error("Error loading messages:", error);
-                    addSystemMessage("Could not load previous messages", "warning");
+                    addSystemMessage(`Could not load previous messages. Starting new conversation.`, "warning");
                 }
                 
                 // Setup WebSocket for real-time updates
@@ -1001,6 +1288,135 @@ document.addEventListener('DOMContentLoaded', async () => {
         } catch (error) {
             console.error("Error loading initial data:", error);
             addSystemMessage(`Could not load necessary data: ${error.message}. Please check if the backend server is running.`, "error");
+        }
+    }
+    
+    // Function to load simulated data when backend is unavailable
+    function loadSimulatedData() {
+        console.log("Loading simulated data for offline mode");
+        
+        // Add default agents
+        const defaultAgents = [
+            { id: '1', name: 'Assistant', status: 'active', description: 'General purpose assistant' },
+            { id: '2', name: 'Researcher', status: 'active', description: 'Specialized in research tasks' },
+            { id: '3', name: 'Coder', status: 'idle', description: 'Programming and code analysis' }
+        ];
+        
+        activeAgents = defaultAgents;
+        displayAgents(defaultAgents);
+        
+        // Add default tools
+        const defaultTools = [
+            { id: '1', name: 'Web Search', description: 'Search the web for information', api_endpoint: '/api/tools/search' },
+            { id: '2', name: 'Calculator', description: 'Perform calculations', api_endpoint: '/api/tools/calculator' },
+            { id: '3', name: 'Code Analysis', description: 'Analyze code and provide suggestions', api_endpoint: '/api/tools/code' },
+            { id: '4', name: 'Weather', description: 'Get weather information', api_endpoint: '/api/tools/weather' }
+        ];
+        
+        availableTools = defaultTools;
+        displayToolIcons(defaultTools);
+        
+        // Add offline notice for current agent
+        if (currentAgentId) {
+            const currentAgent = defaultAgents.find(a => a.id === currentAgentId);
+            if (currentAgent) {
+                currentAgentName.textContent = `${currentAgent.name} (Offline)`;
+            }
+            
+            addSystemMessage("Backend server is offline. Chat functionality will be limited.", "warning");
+        } else {
+            addSystemMessage("Backend server is offline. Select an agent to continue in limited offline mode.", "warning");
+        }
+    }
+
+    // Initialize context panel functionality
+    function initializeContextPanel() {
+        const contextPanel = document.getElementById('context-panel');
+        const contextChainSection = document.getElementById('context-chain');
+        const reasoningStepsSection = document.getElementById('reasoning-steps');
+        const toolUsageSection = document.getElementById('tool-usage');
+        const contextResizeHandle = document.getElementById('context-resize-handle');
+        const contextMinimizeBtn = document.getElementById('context-minimize');
+        
+        // Toggle individual sections
+        document.querySelectorAll('.toggle-section').forEach(button => {
+            button.addEventListener('click', () => {
+                const targetId = button.getAttribute('data-target');
+                const targetContent = document.getElementById(targetId);
+                const parentSection = button.closest('.context-section');
+                
+                if (parentSection) {
+                    parentSection.classList.toggle('collapsed');
+                    const isCollapsed = parentSection.classList.contains('collapsed');
+                    
+                    // Update icon
+                    const icon = button.querySelector('i');
+                    if (icon) {
+                        icon.className = isCollapsed ? 'bi bi-chevron-down' : 'bi bi-chevron-up';
+                    }
+                }
+            });
+        });
+        
+        // Section toggle buttons in header
+        document.getElementById('toggle-context-chain').addEventListener('click', (e) => {
+            e.target.closest('button').classList.toggle('active');
+            contextChainSection.classList.toggle('d-none');
+        });
+        
+        document.getElementById('toggle-reasoning').addEventListener('click', (e) => {
+            e.target.closest('button').classList.toggle('active');
+            reasoningStepsSection.classList.toggle('d-none');
+        });
+        
+        document.getElementById('toggle-tools').addEventListener('click', (e) => {
+            e.target.closest('button').classList.toggle('active');
+            toolUsageSection.classList.toggle('d-none');
+        });
+        
+        // Minimize/Maximize button
+        if (contextMinimizeBtn) {
+            contextMinimizeBtn.addEventListener('click', () => {
+                contextPanel.classList.toggle('minimized');
+                
+                // Update button icon and title
+                const isMinimized = contextPanel.classList.contains('minimized');
+                contextMinimizeBtn.innerHTML = isMinimized 
+                    ? '<i class="bi bi-arrows-angle-expand"></i>' 
+                    : '<i class="bi bi-arrows-angle-contract"></i>';
+                contextMinimizeBtn.title = isMinimized ? 'Maximize panel' : 'Minimize panel';
+            });
+        }
+        
+        // Resize functionality (basic)
+        if (contextResizeHandle) {
+            let startX, startWidth;
+            
+            contextResizeHandle.addEventListener('mousedown', (e) => {
+                startX = e.clientX;
+                startWidth = parseInt(document.defaultView.getComputedStyle(contextPanel).width, 10);
+                document.documentElement.style.cursor = 'ew-resize';
+                
+                // Add event listeners for dragging
+                document.addEventListener('mousemove', resize);
+                document.addEventListener('mouseup', stopResize);
+                
+                // Prevent text selection during resize
+                e.preventDefault();
+            });
+            
+            function resize(e) {
+                const width = startWidth - (e.clientX - startX);
+                if (width > 250 && width < 600) {
+                    contextPanel.style.width = `${width}px`;
+                }
+            }
+            
+            function stopResize() {
+                document.documentElement.style.cursor = '';
+                document.removeEventListener('mousemove', resize);
+                document.removeEventListener('mouseup', stopResize);
+            }
         }
     }
 });

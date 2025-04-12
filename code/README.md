@@ -28,6 +28,10 @@ The system follows a microservices architecture with the following components:
    - Vector Store: Semantic search and embedding storage
    - Key-Value Store: Fast access to short-term memory
    - Document Store: Storage for conversation history and structured data
+   - In-Memory Store: Fast, non-persistent storage for development and testing
+     - Implements agent state management
+     - Handles real-time message storage and retrieval
+     - Manages WebSocket connections and broadcasting
 
 5. **LLM Proxy** (`services/llm_proxy`)
    - Abstracts communication with LLM providers (OpenAI, Anthropic, etc.)
@@ -143,9 +147,36 @@ Create `.env` files in each service directory with the appropriate configuration
 
 ### Communication Between Services
 
-- Services should communicate via HTTP/REST
+- Services communicate via HTTP/REST and WebSocket for real-time updates
 - Use the API Gateway for cross-service communication
-- For high-performance requirements, consider direct service-to-service communication
+- WebSocket connections managed by the backend for real-time chat
+- In-memory storage provides fast access to current state
+- For production, consider implementing persistent storage
+
+## Storage Implementation
+
+The system currently uses in-memory storage for development and testing:
+
+### In-Memory Data Structures
+- `agents`: Dictionary storing agent information and capabilities
+- `messages`: Dictionary storing chat messages and their metadata
+- `tools`: Dictionary storing available tools and their endpoints
+- `metrics`: List storing basic system metrics
+- `active_connections`: Dictionary managing WebSocket connections
+
+### Benefits of In-Memory Storage
+- Fast access and retrieval
+- Simple implementation
+- Perfect for development and testing
+- No database setup required
+- Real-time updates and broadcasting
+
+### Considerations for Production
+- Implement persistent storage for data durability
+- Consider using Redis for distributed caching
+- Add database backup and recovery
+- Implement proper data migration strategies
+- Handle scaling and concurrent access
 
 ## Deployment
 

@@ -156,25 +156,69 @@
         <!-- Context Panel (hidden by default) -->
         <aside class="context-panel collapsed" id="context-panel">
             <div class="context-header">
-                <h6>Context & Tools</h6>
-                <button class="btn btn-icon" id="context-close">
-                    <i class="bi bi-x-lg"></i>
-                </button>
+                <div class="d-flex align-items-center">
+                    <h6 class="mb-0">Context & Tools</h6>
+                    <div class="ms-auto d-flex">
+                        <!-- Section toggle buttons -->
+                        <div class="btn-group btn-group-sm me-2">
+                            <button class="btn btn-outline-secondary active" id="toggle-context-chain" title="Toggle Context Chain">
+                                <i class="bi bi-diagram-3"></i>
+                            </button>
+                            <button class="btn btn-outline-secondary active" id="toggle-reasoning" title="Toggle Reasoning Steps">
+                                <i class="bi bi-list-check"></i>
+                            </button>
+                            <button class="btn btn-outline-secondary active" id="toggle-tools" title="Toggle Tool Usage">
+                                <i class="bi bi-tools"></i>
+                            </button>
+                        </div>
+                        <!-- Minimize/Maximize button -->
+                        <button class="btn btn-sm btn-outline-secondary" id="context-minimize" title="Minimize panel">
+                            <i class="bi bi-arrows-angle-contract"></i>
+                        </button>
+                        <!-- Close button -->
+                        <button class="btn btn-icon" id="context-close" title="Close panel">
+                            <i class="bi bi-x-lg"></i>
+                        </button>
+                    </div>
+                </div>
             </div>
             <div class="context-content">
                 <div id="context-chain" class="context-section">
-                    <h6 class="section-title">Context Chain</h6>
-                    <!-- Context nodes will be added here -->
+                    <div class="section-header d-flex align-items-center">
+                        <h6 class="section-title mb-0">Context Chain</h6>
+                        <button class="btn btn-sm ms-auto toggle-section" data-target="context-chain-content">
+                            <i class="bi bi-chevron-up"></i>
+                        </button>
+                    </div>
+                    <div id="context-chain-content" class="section-content">
+                        <!-- Context nodes will be added here -->
+                    </div>
                 </div>
                 <div id="reasoning-steps" class="context-section">
-                    <h6 class="section-title">Reasoning Steps</h6>
-                    <!-- Reasoning steps will be added here -->
+                    <div class="section-header d-flex align-items-center">
+                        <h6 class="section-title mb-0">Reasoning Steps</h6>
+                        <button class="btn btn-sm ms-auto toggle-section" data-target="reasoning-steps-content">
+                            <i class="bi bi-chevron-up"></i>
+                        </button>
+                    </div>
+                    <div id="reasoning-steps-content" class="section-content">
+                        <!-- Reasoning steps will be added here -->
+                    </div>
                 </div>
                 <div id="tool-usage" class="context-section">
-                    <h6 class="section-title">Tool Usage</h6>
-                    <!-- Tool usage will be added here -->
+                    <div class="section-header d-flex align-items-center">
+                        <h6 class="section-title mb-0">Tool Usage</h6>
+                        <button class="btn btn-sm ms-auto toggle-section" data-target="tool-usage-content">
+                            <i class="bi bi-chevron-up"></i>
+                        </button>
+                    </div>
+                    <div id="tool-usage-content" class="section-content">
+                        <!-- Tool usage will be added here -->
+                    </div>
                 </div>
             </div>
+            <!-- Drag handle for resizing -->
+            <div class="context-resize-handle" id="context-resize-handle"></div>
         </aside>
     </div>
 
@@ -242,6 +286,7 @@
 
     <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="js/base.js"></script>
     <script src="js/chat.js"></script>
 </body>
 </html> 

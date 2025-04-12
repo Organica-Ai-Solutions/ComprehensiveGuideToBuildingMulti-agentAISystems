@@ -159,22 +159,52 @@ Perhaps the biggest challenge with serverless functions is their ephemeral natur
 
 Common options include:
 
-1.  **Vector Stores**: Essential for semantic search and long-term memory involving natural language.
-    *   *Examples*: ChromaDB, Weaviate, Pinecone, Qdrant, Supabase (pgvector), Redis (RediSearch).
-    *   *Use Cases*: Storing document embeddings for RAG (Retrieval-Augmented Generation), finding relevant past interactions, storing agent capabilities semantically.
-    *   *Considerations*: Often require a separate service or database extension. Querying involves generating embeddings. [65]
-2.  **Key-Value Stores / Caches**: Excellent for fast access to frequently needed data or short-term state.
-    *   *Examples*: Redis, Memcached, DynamoDB (AWS), Firestore (Google Cloud - also a NoSQL document store).
-    *   *Use Cases*: Storing conversation history for short-term context windows, caching tool results, managing session state, tracking task status.
-    *   *Considerations*: Data models are often simple key-value pairs. Some are in-memory (Redis/Memcached) requiring persistence configuration or managed services.
-3.  **Relational Databases (Serverless-Friendly)**:
-    *   *Examples*: Supabase (Managed PostgreSQL), Neon, PlanetScale, Amazon RDS Serverless, Azure SQL Database serverless.
-    *   *Use Cases*: Storing structured long-term memory (e.g., user profiles, agent configurations, structured task data), relational data required by tools.
-    *   *Considerations*: Can have higher latency than key-value stores. May involve connection pooling challenges in highly concurrent serverless environments.
-4.  **Document Databases**:
-    *   *Examples*: MongoDB Atlas (Serverless), Firestore, DynamoDB.
-    *   *Use Cases*: Storing semi-structured data like conversation logs, agent state snapshots, configuration objects.
-    *   *Considerations*: Flexible schema but querying complex relationships can be harder than SQL.
+1.  **In-Memory Storage**: Perfect for development, testing, and simple applications.
+    * *Implementation*: Using Python dictionaries and lists for fast access.
+    * *Use Cases*: Development environments, prototypes, simple applications with non-critical data.
+    * *Benefits*:
+      - Extremely fast access and retrieval
+      - No setup or configuration required
+      - Perfect for development and testing
+      - Easy to implement and modify
+      - Real-time updates and broadcasting
+    * *Limitations*:
+      - Data is not persistent (lost on server restart)
+      - Not suitable for production without additional persistence
+      - Limited by available memory
+      - No built-in backup or recovery
+    * *Example Implementation*:
+      ```python
+      # In-memory storage using dictionaries
+      agents = {}      # Store agent information
+      messages = {}    # Store chat messages
+      tools = {}       # Store available tools
+      metrics = []     # Store system metrics
+      ```
+
+2.  **Vector Stores**: Essential for semantic search and long-term memory involving natural language.
+    * *Examples*: ChromaDB, Weaviate, Pinecone, Qdrant, Supabase (pgvector), Redis (RediSearch).
+    * *Use Cases*: Storing document embeddings for RAG (Retrieval-Augmented Generation), finding relevant past interactions, storing agent capabilities semantically.
+    * *Considerations*: Often require a separate service or database extension. Querying involves generating embeddings.
+
+3.  **Key-Value Stores / Caches**: Excellent for fast access to frequently needed data or short-term state.
+    * *Examples*: Redis, Memcached, DynamoDB (AWS), Firestore (Google Cloud).
+    * *Use Cases*: Storing conversation history for short-term context windows, caching tool results, managing session state.
+    * *Considerations*: Data models are simple key-value pairs. Some are in-memory requiring persistence configuration.
+
+4.  **Relational Databases**:
+    * *Examples*: PostgreSQL, MySQL, SQLite
+    * *Use Cases*: Storing structured data like user profiles, agent configurations, task history.
+    * *Considerations*: 
+      - Provides ACID compliance and data integrity
+      - Better for complex queries and relationships
+      - Requires proper schema design
+      - Higher setup and maintenance overhead
+
+5.  **Document Databases**:
+    * *Examples*: MongoDB, Firestore, DynamoDB
+    * *Use Cases*: Storing semi-structured data like conversation logs, agent states.
+    * *Considerations*: Flexible schema but complex queries can be challenging.
 
 The choice depends heavily on the specific needs of the agent system: the type of data (text, structured, key-value), volume, required access speed (latency), query patterns (semantic vs. exact match vs. relational), and cost.
 
