@@ -1,0 +1,298 @@
+/* Common Styles for Multi-Agent AI System */
+
+body {
+    padding-top: 56px;
+    display: flex;
+    min-height: 100vh;
+    flex-direction: column;
+}
+
+.main-content {
+    flex: 1;
+    padding-top: 1.5rem;
+    padding-bottom: 1.5rem;
+}
+
+/* Sidebar styles */
+.sidebar {
+    background-color: #f8f9fa;
+    padding: 1.5rem;
+    border-right: 1px solid #dee2e6;
+}
+
+.agent-card {
+    margin-bottom: 1rem;
+    transition: transform 0.2s;
+}
+
+.agent-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+
+/* Log and context display */
+.log-area {
+    background-color: #e9ecef;
+    border-radius: 0.25rem;
+    padding: 1rem;
+    min-height: 200px;
+    font-family: monospace;
+    font-size: 0.9em;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    margin-bottom: 1rem;
+}
+
+/* Chat styles */
+.chat-container {
+    border: 1px solid #dee2e6;
+    border-radius: 0.25rem;
+    height: 400px;
+    overflow-y: auto;
+    padding: 1rem;
+    background-color: #f8f9fa;
+    margin-bottom: 1rem;
+}
+
+.message {
+    margin-bottom: 1rem;
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+    max-width: 80%;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    transition: opacity 0.3s;
+}
+
+.message:last-child {
+    animation: fadeIn 0.5s;
+}
+
+.user-message {
+    background-color: #d1e7dd;
+    margin-left: auto;
+    text-align: right;
+}
+
+.agent-message {
+    background-color: #e2e3e5;
+}
+
+.message-sender {
+    font-weight: bold;
+    margin-bottom: 0.25rem;
+}
+
+.message-timestamp {
+    opacity: 0.7;
+}
+
+.thinking {
+    font-style: italic;
+    color: #6c757d;
+}
+
+.chat-input {
+    display: flex;
+}
+
+.chat-input input {
+    flex-grow: 1;
+    margin-right: 0.5rem;
+}
+
+/* Animation effects */
+.spin {
+    animation: spin 1s linear infinite;
+    display: inline-block;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+/* Capability badges */
+.capability-badge {
+    margin-right: 0.25rem;
+    margin-bottom: 0.25rem;
+}
+
+/* Tool list styling */
+.tool-item {
+    transition: background-color 0.2s;
+}
+
+.tool-item:hover {
+    background-color: rgba(0,0,0,0.03);
+}
+
+.tool-count {
+    font-size: 0.8em;
+    opacity: 0.7;
+}
+
+/* Sticky components */
+.agent-info, .sticky-top-custom {
+    position: sticky;
+    top: 1rem;
+}
+
+/* ReAct tracing */
+.reasoning-trace ol {
+    padding-left: 1.5rem;
+}
+
+.reasoning-trace li {
+    margin-bottom: 0.3rem;
+}
+
+/* Dark theme adjustments */
+[data-bs-theme="dark"] .sidebar {
+    background-color: #212529;
+    border-right: 1px solid #343a40;
+}
+
+[data-bs-theme="dark"] .log-area {
+    background-color: #343a40;
+}
+
+[data-bs-theme="dark"] .chat-container {
+    background-color: #212529;
+}
+
+[data-bs-theme="dark"] .user-message {
+    background-color: #0d6efd;
+    color: white;
+}
+
+[data-bs-theme="dark"] .agent-message {
+    background-color: #343a40;
+    color: white;
+}
+
+[data-bs-theme="dark"] .tool-item:hover {
+    background-color: rgba(255,255,255,0.05);
+}
+
+/* Responsive adjustments */
+@media (max-width: 767.98px) {
+    .sidebar {
+        border-right: none;
+        border-bottom: 1px solid #dee2e6;
+        margin-bottom: 1rem;
+    }
+    
+    [data-bs-theme="dark"] .sidebar {
+        border-bottom: 1px solid #343a40;
+    }
+    
+    .chat-container {
+        height: 300px;
+    }
+}
+
+/* Chat message content formatting */
+.message-content {
+    line-height: 1.5;
+}
+
+.message-content ul, 
+.message-content ol {
+    padding-left: 1.5rem;
+    margin-top: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.message-content li {
+    margin-bottom: 0.3rem;
+}
+
+.message-content strong, 
+.message-content b {
+    font-weight: 600;
+}
+
+.message-content code {
+    background-color: rgba(0,0,0,0.05);
+    padding: 0.1rem 0.3rem;
+    border-radius: 0.2rem;
+    font-family: monospace;
+    font-size: 0.9em;
+}
+
+[data-bs-theme="dark"] .message-content code {
+    background-color: rgba(255,255,255,0.1);
+}
+
+/* Animation for the thinking indicator */
+@keyframes ellipsis {
+    0% { content: "."; }
+    33% { content: ".."; }
+    66% { content: "..."; }
+    100% { content: ""; }
+}
+
+.thinking::after {
+    content: "";
+    display: inline-block;
+    width: 1em;
+    animation: ellipsis 1.5s infinite;
+}
+
+/* Dashboard specific styles */
+#refresh-button {
+    transition: all 0.2s;
+}
+
+#refresh-button:hover {
+    background-color: #e2e6ea;
+}
+
+#refresh-button:disabled {
+    opacity: 0.5;
+}
+
+#system-status {
+    font-size: 0.85rem;
+    padding: 0.5rem 0.75rem;
+}
+
+/* Recent events styling */
+.recent-event {
+    border-left: 3px solid #6c757d;
+    padding-left: 10px;
+    margin-bottom: 8px;
+    transition: background-color 0.2s;
+}
+
+.recent-event:hover {
+    background-color: rgba(0,0,0,0.05);
+}
+
+[data-bs-theme="dark"] .recent-event:hover {
+    background-color: rgba(255,255,255,0.05);
+}
+
+/* Tool usage indicators */
+.usage-low {
+    color: #6c757d;
+}
+
+.usage-medium {
+    color: #fd7e14;
+}
+
+.usage-high {
+    color: #198754;
+}
+
+/* Timestamp styles */
+.timestamp-text {
+    font-size: 0.75rem;
+    color: #6c757d;
+} 

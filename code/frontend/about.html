@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en" data-bs-theme="light">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>About - Multi-Agent AI Systems</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <link href="css/styles.css" rel="stylesheet">
+</head>
+<body>
+    <nav class="navbar navbar-expand-md navbar-dark bg-dark fixed-top">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="index.html"><i class="bi bi-robot"></i> Multi-Agent AI Systems</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarCollapse" aria-controls="navbarCollapse" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarCollapse">
+                <ul class="navbar-nav me-auto mb-2 mb-md-0">
+                    <li class="nav-item">
+                        <a class="nav-link" href="index.html"><i class="bi bi-speedometer2"></i> Dashboard</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="agent_chat.html"><i class="bi bi-chat-dots"></i> Agent Chat</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="about.html"><i class="bi bi-book"></i> About</a>
+                    </li>
+                </ul>
+                <button class="btn btn-icon" id="theme-toggler" type="button">
+                    <i class="bi bi-moon-stars-fill"></i> <span id="theme-label">Dark</span>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid main-content mt-5 pt-4">
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="bg-dark text-white p-5 rounded shadow-lg text-center">
+                    <h1 class="display-4"><i class="bi bi-robot"></i> Building Multi-Agent AI Systems</h1>
+                    <p class="lead">An interactive exploration of advanced AI systems featuring coordinated agents.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="row justify-content-center">
+            <div class="col-lg-8">
+                <!-- Introduction -->
+                <div class="card shadow-sm mb-4">
+                    <div class="card-body p-4">
+                        <h2 class="card-title border-bottom pb-2 mb-3"><i class="bi bi-info-circle"></i> About This Project</h2>
+                        <p class="card-text">
+                            Multi-agent AI systems represent a revolutionary paradigm in artificial intelligence. They combine the cognitive capabilities of large language models (LLMs) with specialized tools and coordination mechanisms to create powerful, autonomous applications capable of solving complex problems.
+                        </p>
+                        <p class="card-text">
+                            This interactive demo showcases key concepts, architectures, and implementation details involved in building these systems, complementing the accompanying book "Building Multi-Agent AI Systems."
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Book Chapters -->
+                <div class="card shadow-sm mb-4">
+                    <div class="card-header bg-light">
+                        <h3 class="mb-0"><i class="bi bi-journal-bookmark-fill"></i> Core Concepts (Book Chapters)</h3>
+                    </div>
+                    <div class="card-body p-4">
+                        <p>This demo illustrates concepts covered in the following book chapters:</p>
+                        <div class="list-group list-group-flush">
+                            <div class="list-group-item">
+                                <h5 class="mb-1">Chapter 1: Introduction to Multi-Agent AI Systems</h5>
+                                <p class="mb-1 small text-muted">Foundational concepts of multi-agent AI systems: AI agents, LLMs as cognitive cores, tool use, and how these elements combine to create autonomous systems capable of solving complex problems.</p>
+                            </div>
+                            <div class="list-group-item">
+                                <h5 class="mb-1">Chapter 2: Model Context Protocol (MCP)</h5>
+                                <p class="mb-1 small text-muted">The structured approach to context management in multi-agent systems, including roles, messages, memory objects, histories, and tool definitions that enable seamless agent coordination.</p>
+                            </div>
+                            <div class="list-group-item">
+                                <h5 class="mb-1">Chapter 3: Chain of Thought (CoT) Reasoning</h5>
+                                <p class="mb-1 small text-muted">Step-by-step reasoning techniques that allow AI agents to break down complex problems, making their thought processes explicit, traceable, and more accurate.</p>
+                            </div>
+                            <div class="list-group-item">
+                                <h5 class="mb-1">Chapter 4: Tool Use in AI Agents</h5>
+                                <p class="mb-1 small text-muted">How agents interact with external systems (APIs, databases, etc.) to extend their capabilities beyond the knowledge contained in their training data.</p>
+                            </div>
+                            <div class="list-group-item">
+                                <h5 class="mb-1">Chapter 5: Multi-Agent Systems Architecture</h5>
+                                <p class="mb-1 small text-muted">Design patterns for building systems with multiple specialized agents working together to accomplish complex tasks.</p>
+                            </div>
+                            <div class="list-group-item">
+                                <h5 class="mb-1">Chapter 6: Implementation and Deployment</h5>
+                                <p class="mb-1 small text-muted">Practical guidance for implementing, testing and deploying multi-agent systems in real-world applications.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Interactive Demo Features -->
+                <div class="card shadow-sm mb-4">
+                    <div class="card-header bg-light">
+                        <h3 class="mb-0"><i class="bi bi-joystick"></i> Interactive Demo Features</h3>
+                    </div>
+                    <div class="card-body p-4">
+                        <p>This web application allows you to experience these concepts directly:</p>
+                        <ul class="list-unstyled">
+                            <li class="mb-2"><i class="bi bi-speedometer2 text-primary me-2"></i> <strong>Dashboard:</strong> Monitor agent status, metrics, and system performance.</li>
+                            <li class="mb-2"><i class="bi bi-chat-dots text-success me-2"></i> <strong>Agent Chat:</strong> Interact with AI agents and observe how they respond to queries.</li>
+                            <li class="mb-2"><i class="bi bi-diagram-2 text-info me-2"></i> <strong>Chain of Thought:</strong> Observe agent reasoning steps in the context panel during chat.</li>
+                            <li class="mb-2"><i class="bi bi-tools text-warning me-2"></i> <strong>Tool Integration:</strong> See how agents select and utilize tools to extend their capabilities.</li>
+                            <li class="mb-2"><i class="bi bi-diagram-3 text-secondary me-2"></i> <strong>Model Context Protocol:</strong> Visualize how context flows between components in the system.</li>
+                        </ul>
+                        <hr>
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-start">
+                            <a href="index.html" class="btn btn-primary btn-lg"><i class="bi bi-house-door"></i> View Dashboard</a>
+                            <a href="agent_chat.html" class="btn btn-success btn-lg"><i class="bi bi-chat-right-text"></i> Start Chatting</a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Key Concepts Visual -->
+                <div class="card shadow-sm mb-4">
+                    <div class="card-header bg-light">
+                        <h3 class="mb-0"><i class="bi bi-lightbulb-fill"></i> Multi-Agent System Components</h3>
+                    </div>
+                    <div class="card-body p-4">
+                        <div class="row g-4">
+                            <div class="col-md-6">
+                                <div class="card h-100 border-primary shadow-sm">
+                                    <div class="card-body text-center">
+                                        <i class="bi bi-robot display-4 text-primary mb-3"></i>
+                                        <h5 class="card-title">AI Agents</h5>
+                                        <p class="card-text small">Autonomous entities with goals, reasoning abilities, planning, and memory that work to accomplish specific tasks.</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="card h-100 border-info shadow-sm">
+                                    <div class="card-body text-center">
+                                        <i class="bi bi-cpu-fill display-4 text-info mb-3"></i>
+                                        <h5 class="card-title">LLMs as Core</h5>
+                                        <p class="card-text small">Large Language Models provide the cognitive capabilities for understanding, reasoning, and generating responses.</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="card h-100 border-warning shadow-sm">
+                                    <div class="card-body text-center">
+                                        <i class="bi bi-tools display-4 text-warning mb-3"></i>
+                                        <h5 class="card-title">Tool Use</h5>
+                                        <p class="card-text small">Agents can use external tools to access information, perform calculations, and interact with other systems.</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="card h-100 border-secondary shadow-sm">
+                                    <div class="card-body text-center">
+                                        <i class="bi bi-diagram-3-fill display-4 text-secondary mb-3"></i>
+                                        <h5 class="card-title">Context Protocol (MCP)</h5>
+                                        <p class="card-text small">Structured approach to managing roles, messages, and memory across the multi-agent system.</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="card h-100 border-success shadow-sm">
+                                    <div class="card-body text-center">
+                                        <i class="bi bi-arrow-repeat display-4 text-success mb-3"></i>
+                                        <h5 class="card-title">Chain of Thought</h5>
+                                        <p class="card-text small">Step-by-step reasoning process that makes AI decision-making transparent and more accurate.</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="card h-100 border-danger shadow-sm">
+                                    <div class="card-body text-center">
+                                        <i class="bi bi-people-fill display-4 text-danger mb-3"></i>
+                                        <h5 class="card-title">Agent Coordination</h5>
+                                        <p class="card-text small">Specialized agents working together in defined roles to solve complex problems collaboratively.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Technology Stack -->
+                <div class="card shadow-sm">
+                    <div class="card-header bg-light">
+                        <h3 class="mb-0"><i class="bi bi-stack"></i> Technology Stack</h3>
+                    </div>
+                    <div class="card-body p-4">
+                        <p>This demo application is built using:</p>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <ul class="list-group list-group-flush">
+                                    <li class="list-group-item"><i class="bi bi-braces text-danger me-2"></i><strong>Backend:</strong> Python (FastAPI)</li>
+                                    <li class="list-group-item"><i class="bi bi-cloud-arrow-up text-info me-2"></i><strong>Web Server:</strong> Uvicorn</li>
+                                    <li class="list-group-item"><i class="bi bi-database text-primary me-2"></i><strong>Database:</strong> SQLite</li>
+                                    <li class="list-group-item"><i class="bi bi-arrow-left-right text-success me-2"></i><strong>Real-time:</strong> WebSockets</li>
+                                </ul>
+                            </div>
+                            <div class="col-md-6">
+                                <ul class="list-group list-group-flush">
+                                    <li class="list-group-item"><i class="bi bi-filetype-html text-warning me-2"></i><strong>Frontend:</strong> HTML5, CSS3</li>
+                                    <li class="list-group-item"><i class="bi bi-filetype-js text-info me-2"></i><strong>JavaScript:</strong> Vanilla JS (ES6+)</li>
+                                    <li class="list-group-item"><i class="bi bi-bootstrap-fill text-primary me-2"></i><strong>Framework:</strong> Bootstrap 5.3</li>
+                                    <li class="list-group-item"><i class="bi bi-bar-chart-line text-success me-2"></i><strong>Charting:</strong> Chart.js (Dashboard)</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+        
+        <!-- Footer -->
+        <footer class="mt-5 pt-4 pb-3 text-center text-muted border-top">
+            <small>&copy; 2024 Building Multi-Agent AI Systems</small>
+        </footer>
+        
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
+    <script src="js/base.js"></script>
+    <script>
+        // Remove any automatically injected scripts
+        document.addEventListener('DOMContentLoaded', function() {
+            // Find all script tags
+            const scripts = document.querySelectorAll('script');
+            
+            // Check each script and remove unwanted ones
+            scripts.forEach(script => {
+                const src = script.getAttribute('src');
+                if (src && (src.includes('index.js') || src.includes('app.js'))) {
+                    console.log('Removing conflicting script:', src);
+                    script.remove();
+                }
+            });
+            
+            // Initialize the theme toggler since we're using base.js
+            if (typeof initializeThemeToggler === 'function') {
+                initializeThemeToggler();
+            }
+        });
+    </script>
+</body>
+</html> 
