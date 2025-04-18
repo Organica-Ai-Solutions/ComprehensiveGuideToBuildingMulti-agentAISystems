@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, WebSocket, Body, Depends, Request, WebSocketDisconnect, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import APIKeyHeader
@@ -20,7 +21,22 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Agent System", version="1.0.0")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan context manager for FastAPI application"""
+    # Startup
+    logger.info("Initializing application...")
+    initialize_sample_data()
+    logger.info("Application initialized")
+    yield
+    # Shutdown
+    logger.info("Shutting down application...")
+
+app = FastAPI(
+    title="Agent System",
+    version="1.0.0",
+    lifespan=lifespan
+)
 
 # Add security headers
 API_KEY = APIKeyHeader(name="X-API-Key", auto_error=False)
@@ -28,12 +44,12 @@ API_KEY = APIKeyHeader(name="X-API-Key", auto_error=False)
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:8080", "http://localhost:3000", "http://localhost:58957", "http://127.0.0.1:3000", "http://127.0.0.1:58957"],  # Allow multiple frontend origins
+    allow_origins=["http://localhost:8080", "http://localhost:3000", "http://localhost:58957", "http://127.0.0.1:3000", "http://127.0.0.1:58957"],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"],
-    allow_headers=["*"],  # Allow all headers
+    allow_headers=["*"],
     expose_headers=["*"],
-    max_age=3600,  # Cache preflight requests for 1 hour
+    max_age=3600,
 )
 
 # Load environment variables
@@ -48,6 +64,61 @@ messages = {}
 tools = {}
 metrics = []
 active_connections = {}
+
+# Add these to your global variables section
+context_history = []
+MAX_CONTEXT_SIZE = 4096  # Maximum tokens allowed
+current_context_size = 0
+
+class MCPMetrics:
+    def __init__(self):
+        self.total_tokens = 0
+        self.active_roles = set()
+        self.total_messages = 0
+        self.memory_objects = 0
+        self.context_history = []
+        self.max_tokens = 4096
+        self.last_update = datetime.now()
+
+    def update_metrics(self, agents_data, messages_data):
+        """Update all metrics based on current system state"""
+        # Update active roles
+        self.active_roles = {agent.role for agent in agents_data.values() if agent.status == 'active'}
+        
+        # Update message count and token usage
+        self.total_messages = len(messages_data)
+        self.total_tokens = sum(msg.token_count for msg in messages_data.values())
+        
+        # Update memory objects (active agents and their contexts)
+        self.memory_objects = len(agents_data)
+        
+        # Update context history
+        current_time = datetime.now()
+        if (current_time - self.last_update).seconds >= 30:  # Update every 30 seconds
+            self.context_history.append({
+                'timestamp': current_time.isoformat(),
+                'tokens_used': self.total_tokens
+            })
+            if len(self.context_history) > 12:  # Keep last 12 points
+                self.context_history.pop(0)
+            self.last_update = current_time
+
+    def get_metrics(self):
+        """Get current metrics"""
+        return {
+            'roles': len(self.active_roles),
+            'messages': self.total_messages,
+            'memory_objects': self.memory_objects,
+            'context': {
+                'total_tokens': self.total_tokens,
+                'max_tokens': self.max_tokens,
+                'usage_percentage': (self.total_tokens / self.max_tokens) * 100 if self.max_tokens > 0 else 0,
+                'history': self.context_history
+            }
+        }
+
+# Initialize MCP metrics
+mcp_metrics = MCPMetrics()
 
 # Model classes
 class Agent(BaseModel):
@@ -204,11 +275,6 @@ def initialize_sample_data():
 
     print("Sample data initialized")
 
-# Initialize data on startup
-@app.on_event("startup")
-async def startup_event():
-    initialize_sample_data()
-
 # API Endpoints
 @app.get("/api/agents")
 @app.head("/api/agents")
@@ -232,7 +298,7 @@ async def get_agent_messages(agent_id: str):
     return sorted(agent_messages, key=lambda x: x.timestamp)
 
 async def process_message(agent_id: str, data: dict):
-    """Process incoming WebSocket message"""
+    """Process incoming WebSocket message with token tracking"""
     try:
         if 'type' not in data:
             raise ValueError("Message must include a 'type' field")
@@ -241,15 +307,24 @@ async def process_message(agent_id: str, data: dict):
             if 'content' not in data:
                 raise ValueError("Message type 'message' must include 'content'")
 
+            # Calculate token count (simple word-based estimation)
+            content = data['content']
+            token_count = len(content.split())
+            
+            # Check if adding this message would exceed token limit
+            current_tokens = sum(msg.token_count for msg in messages.values())
+            if current_tokens + token_count > mcp_metrics.max_tokens:
+                raise ValueError(f"Message would exceed maximum context size of {mcp_metrics.max_tokens} tokens")
+            
             # Create user message
             msg_id = str(len(messages) + 1)
             user_msg = MessageInDB(
                 id=msg_id,
                 agent_id=agent_id,
-                content=data['content'],
+                content=content,
                 sender=data.get('sender', 'user'),
                 timestamp=datetime.now(),
-                token_count=len(data['content'].split()),
+                token_count=token_count,
                 message_type='text',
                 status='success'
             )
@@ -260,8 +335,13 @@ async def process_message(agent_id: str, data: dict):
             if not agent:
                 raise ValueError(f"Agent {agent_id} not found")
 
-            # Generate response based on agent role
-            response_content = generate_agent_response(agent, data['content'])
+            # Generate response
+            response_content = generate_agent_response(agent, content)
+            response_token_count = len(response_content.split())
+            
+            # Check combined token count
+            if current_tokens + token_count + response_token_count > mcp_metrics.max_tokens:
+                raise ValueError(f"Response would exceed maximum context size of {mcp_metrics.max_tokens} tokens")
             
             response_id = str(len(messages) + 1)
             agent_msg = MessageInDB(
@@ -270,23 +350,26 @@ async def process_message(agent_id: str, data: dict):
                 content=response_content,
                 sender='agent',
                 timestamp=datetime.now(),
-                token_count=len(response_content.split()),
+                token_count=response_token_count,
                 message_type='text',
                 status='success'
             )
             messages[response_id] = agent_msg
 
-            # Broadcast the response to all connected clients
+            # Update MCP metrics
+            mcp_metrics.update_metrics(agents, messages)
+
+            # Broadcast the response
             response = {
                 'type': 'message',
                 'content': response_content,
                 'timestamp': datetime.now().isoformat(),
                 'status': 'success',
                 'sender': 'agent',
-                'agent_name': agent.name
+                'agent_name': agent.name,
+                'token_count': response_token_count
             }
             await manager.broadcast(response, agent_id)
-
             return response
 
         elif data['type'] == 'typing':
@@ -412,20 +495,21 @@ async def chat_with_agent(
 
 @app.get("/api/metrics")
 async def get_metrics():
-    """Get system metrics for the dashboard"""
-    active_agent_count = sum(1 for agent in agents.values() if agent.status == 'active')
+    """Get system metrics including MCP data for the dashboard"""
+    # Update MCP metrics with current system state
+    mcp_metrics.update_metrics(agents, messages)
     
-    # Calculate basic metrics
-    total_messages = len(messages)
-    recent_messages = sum(1 for msg in messages.values() 
-                         if (datetime.now() - msg.timestamp).total_seconds() < 3600)
+    # Get the updated metrics
+    metrics_data = mcp_metrics.get_metrics()
     
     return {
-        "active_agents": active_agent_count,
-        "total_messages": total_messages,
-        "recent_messages": recent_messages,
+        "active_agents": len([a for a in agents.values() if a.status == 'active']),
+        "total_messages": len(messages),
+        "recent_messages": sum(1 for msg in messages.values() 
+                             if (datetime.now() - msg.timestamp).total_seconds() < 3600),
         "system_load": psutil.cpu_percent(),
-        "memory_usage": psutil.virtual_memory().percent
+        "memory_usage": psutil.virtual_memory().percent,
+        "mcp": metrics_data
     }
 
 @app.options("/api/tools")
@@ -439,6 +523,55 @@ async def agents_options():
 @app.options("/api/metrics")
 async def metrics_options():
     return {}  # Return empty dict for OPTIONS request
+
+@app.get("/api/health")
+async def health_check():
+    """Health check endpoint for monitoring"""
+    return {
+        "status": "healthy",
+        "timestamp": datetime.now().isoformat(),
+        "version": "1.0.0",
+        "uptime": psutil.boot_time()
+    }
+
+@app.put("/api/agents/{agent_id}", response_model=Agent)
+async def update_agent(agent_id: str, update_data: dict = Body(...)):
+    """Update agent properties"""
+    if agent_id not in agents:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    
+    # Get the current agent data
+    agent = agents[agent_id]
+    
+    # Update only the allowed fields
+    if "status" in update_data:
+        if update_data["status"] not in ["active", "idle"]:
+            raise HTTPException(status_code=400, detail="Invalid status value")
+        agent.status = update_data["status"]
+    
+    # Return the updated agent
+    return agent
+
+@app.options("/api/agents/{agent_id}")
+async def agent_options():
+    """Handle OPTIONS request for agent endpoints"""
+    return {}
+
+@app.options("/api/health")
+async def health_options():
+    """Handle OPTIONS request for health endpoint"""
+    return {}
+
+@app.get("/api/security/events")
+async def security_events():
+    return {
+        "events": [],
+        "last_checked": datetime.now().isoformat()
+    }
+
+@app.options("/api/security/events")
+async def security_events_options():
+    return {}
 
 if __name__ == "__main__":
     uvicorn.run(app, host="localhost", port=8000) 

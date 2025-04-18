@@ -1,3 +1,5 @@
+import { API_CONFIG } from './config.js';
+
 document.addEventListener('DOMContentLoaded', () => {
     setupRefreshButton();
     refreshAllData();
@@ -19,11 +21,13 @@ const API_CONFIG = {
 // --- Agent Fetching ---
 async function fetchAgents() {
     const agentListDiv = document.getElementById('agent-list');
-    const apiUrl = 'http://localhost:5001/api/agents'; 
+    const apiUrl = `${API_CONFIG.baseUrl}${API_CONFIG.endpoints.agents}`; 
 
     try {
         console.log(`Fetching agents from: ${apiUrl}`);
-        const response = await fetch(apiUrl);
+        const response = await fetch(apiUrl, {
+            headers: API_CONFIG.headers
+        });
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
@@ -123,11 +127,13 @@ function getStatusBadgeClass(status) {
 // --- Tool Fetching & Display ---
 async function fetchTools() {
     const toolListDiv = document.getElementById('tool-list');
-    const apiUrl = 'http://localhost:5001/api/tools'; 
+    const apiUrl = `${API_CONFIG.baseUrl}${API_CONFIG.endpoints.tools}`; 
     
     try {
         console.log(`Fetching tools from: ${apiUrl}`);
-        const response = await fetch(apiUrl);
+        const response = await fetch(apiUrl, {
+            headers: API_CONFIG.headers
+        });
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
@@ -478,5 +484,47 @@ function updateTimestamp(elementId) {
     if (element) {
         const now = new Date();
         element.textContent = `Last updated: ${now.toLocaleTimeString()}`;
+    }
+}
+
+// Check backend connectivity before making API calls
+async function checkBackendConnectivity() {
+    try {
+        // Use HEAD request to /api/agents to check backend availability
+        const response = await fetch(`${API_CONFIG.baseUrl}${API_CONFIG.endpoints.agents}`, {
+            method: 'HEAD',
+            headers: API_CONFIG.headers
+        });
+        
+        if (response.ok) {
+            console.log('Backend connectivity check passed');
+            return true;
+        }
+        throw new Error(`HTTP ${response.status}`);
+    } catch (error) {
+        console.error('Backend connectivity check failed:', error);
+        showError('system-status', `Backend connectivity error: ${error.message}`);
+        updateSystemStatus('error', 'Backend Error');
+        return false;
+    }
+}
+
+// Modified loadAllData to check connectivity first
+async function loadAllData() {
+    cleanupCharts();
+    
+    // Check backend connectivity first
+    const isConnected = await checkBackendConnectivity();
+    if (!isConnected) {
+        showError('system-status', 'Cannot connect to backend. Please check your connection and try again.');
+        return;
+    }
+    
+    fetchAgents();
+    fetchTools();
+    
+    // Only start MCP updates if the chart exists on the page
+    if (document.getElementById('context-history-chart')) {
+        startMcpUpdates();
     }
 } 

@@ -6,6 +6,8 @@ const API_CONFIG = {
         AGENTS: '/api/agents',
         TOOLS: '/api/tools',
         METRICS: '/api/metrics',
+        HEALTH: '/api/health',
+        SECURITY: '/api/security/events',
         MESSAGES: '/api/messages',
         WEBSOCKET: '/ws'
     },
@@ -14,11 +16,15 @@ const API_CONFIG = {
     TIMEOUT: 5000,           // Request timeout in milliseconds
     DEFAULT_HEADERS: {       // Default headers for all requests
         'Accept': 'application/json',
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+        'Content-Type': 'application/json'
     }
+};
+
+// Default fetch options that can be spread into fetch calls
+const defaultFetchOptions = {
+    headers: API_CONFIG.DEFAULT_HEADERS,
+    mode: 'cors',
+    cache: 'no-cache'
 };
 
 // Theme Management
