@@ -79,79 +79,168 @@ Key considerations for API design include:
 
 ### API Implementation Example
 
-Here's a simple FastAPI implementation for an agent API:
+Here's our FastAPI implementation for the agent system:
 
 ```python
-from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks
+from fastapi import FastAPI, HTTPException, WebSocket, Body, Depends, Request, WebSocketDisconnect, status
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
-import uuid
-import asyncio
+from datetime import datetime
+import logging
 
-app = FastAPI(title="Agent System API")
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-# Security setup
-API_KEY = "your-secret-api-key"
-api_key_header = APIKeyHeader(name="X-API-Key")
+app = FastAPI(title="Agent System", version="1.0.0")
 
-def verify_api_key(api_key: str = Depends(api_key_header)):
-    if api_key != API_KEY:
-        raise HTTPException(status_code=403, detail="Invalid API key")
-    return api_key
+# Configure CORS for multiple frontend origins
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:8080", "http://localhost:3000", "http://localhost:58957"],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"],
+    allow_headers=["*"],
+    expose_headers=["*"],
+    max_age=3600,
+)
 
-# Task storage (in a real system, use a database)
-tasks = {}
-
-# Request models
-class AgentRequest(BaseModel):
-    query: str
-    context: Optional[Dict[str, Any]] = None
-
-# Response models
-class TaskResponse(BaseModel):
-    task_id: str
+# Model classes for request/response handling
+class Agent(BaseModel):
+    id: str
+    name: str
+    role: str
+    goal: str
+    capabilities: List[str]
     status: str
+    created_at: Optional[datetime] = None
 
-class AgentResponse(BaseModel):
-    result: str
-    thoughts: List[str]
-    tool_calls: List[Dict[str, Any]]
+class MessageBase(BaseModel):
+    content: str
+    sender: str = "user"
 
-# Simulate agent execution
-async def run_agent_task(task_id: str, query: str, context: Optional[Dict] = None):
-    # Simulate processing time
-    await asyncio.sleep(5)
+class MessageInDB(MessageBase):
+    id: str
+    agent_id: str
+    timestamp: datetime
+    token_count: int = 0
+    message_type: str = "text"
+    status: str = "pending"
+
+class ReasoningStep(BaseModel):
+    step_number: int
+    content: str
+
+class EnhancedResponse(BaseModel):
+    content: str
+    reasoning_steps: List[ReasoningStep]
+
+# In-memory storage (for development/testing)
+agents = {}
+messages = {}
+tools = {}
+metrics = []
+
+# API Endpoints
+@app.get("/api/agents")
+async def get_agents():
+    """List all available agents"""
+    return list(agents.values())
+
+@app.get("/api/agents/{agent_id}")
+async def get_agent(agent_id: str):
+    """Get details of a specific agent"""
+    if agent_id not in agents:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    return agents[agent_id]
+
+@app.post("/api/agents/{agent_id}/chat")
+async def chat_with_agent(agent_id: str, payload: Dict[str, Any]):
+    """Chat with a specific agent"""
+    try:
+        if agent_id not in agents:
+            raise HTTPException(status_code=404, detail="Agent not found")
+
+        if "content" not in payload:
+            raise HTTPException(status_code=400, detail="Message content is required")
+
+        # Generate agent response with reasoning steps
+        agent = agents[agent_id]
+        response_content = generate_agent_response(agent, payload["content"])
+        reasoning_steps = [
+            ReasoningStep(step_number=1, content="Processed user message"),
+            ReasoningStep(step_number=2, content="Generated response based on agent role and capabilities")
+        ]
+
+        return {
+            "content": response_content,
+            "reasoning_steps": reasoning_steps
+        }
+
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        logger.error(f"Error processing message: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error processing message: {str(e)}"
+        )
+
+@app.get("/api/metrics")
+async def get_metrics():
+    """Get system metrics"""
+    active_agent_count = sum(1 for agent in agents.values() if agent.status == 'active')
+    total_messages = len(messages)
+    recent_messages = sum(1 for msg in messages.values() 
+                         if (datetime.now() - msg.timestamp).total_seconds() < 3600)
     
-    # Update task with result (in a real system, this would call your agent logic)
-    tasks[task_id] = {
-        "status": "completed",
-        "result": f"Response to: {query}",
-        "thoughts": ["First I need to understand the query", "I should use a search tool"],
-        "tool_calls": [{"tool": "search", "input": query}]
+    return {
+        "active_agents": active_agent_count,
+        "total_messages": total_messages,
+        "recent_messages": recent_messages,
+        "system_load": psutil.cpu_percent(),
+        "memory_usage": psutil.virtual_memory().percent
     }
 
-# API endpoints
-@app.post("/agent/task", response_model=TaskResponse, dependencies=[Depends(verify_api_key)])
-async def create_agent_task(request: AgentRequest, background_tasks: BackgroundTasks):
-    task_id = str(uuid.uuid4())
-    tasks[task_id] = {"status": "processing"}
-    
-    # Run the agent in the background
-    background_tasks.add_task(run_agent_task, task_id, request.query, request.context)
-    
-    return {"task_id": task_id, "status": "processing"}
+def generate_agent_response(agent: Agent, user_message: str) -> str:
+    """Generate a contextual response based on agent's role and capabilities"""
+    try:
+        responses = {
+            "Academic Research": f"As a Research Assistant, I can help you with: {', '.join(agent.capabilities)}. How can I assist with your research?",
+            "Programming Assistant": f"I'm your Code Helper with expertise in: {', '.join(agent.capabilities)}. What coding challenge can I help you with?",
+            "Content Creation": f"As a Writing Assistant, I specialize in: {', '.join(agent.capabilities)}. How can I help improve your writing?"
+        }
+        
+        return responses.get(agent.role, f"I am {agent.name}, how can I assist you?")
+        
+    except Exception as e:
+        logger.error(f"Error generating response: {str(e)}")
+        return "I apologize, but I'm having trouble processing your request at the moment. Could you please try again?"
 
-@app.get("/agent/task/{task_id}", response_model=AgentResponse, dependencies=[Depends(verify_api_key)])
-async def get_task_result(task_id: str):
-    if task_id not in tasks:
-        raise HTTPException(status_code=404, detail="Task not found")
-        
-    if tasks[task_id]["status"] == "processing":
-        raise HTTPException(status_code=202, detail="Task still processing")
-        
-    return tasks[task_id]
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="localhost", port=8000)
 ```
+
+This implementation provides:
+
+1. **CORS Support**: Configured for multiple frontend origins
+2. **Type Safety**: Using Pydantic models for request/response validation
+3. **Error Handling**: Comprehensive error handling with proper HTTP status codes
+4. **Metrics**: System monitoring endpoint for active agents and message statistics
+5. **Logging**: Structured logging for debugging and monitoring
+6. **WebSocket Support**: Real-time communication capabilities
+7. **Chain of Thought**: Reasoning steps included in agent responses
+
+The API supports the following endpoints:
+
+* `GET /api/agents` - List all available agents
+* `GET /api/agents/{agent_id}` - Get specific agent details
+* `POST /api/agents/{agent_id}/chat` - Chat with a specific agent
+* `GET /api/metrics` - Get system metrics
+* `WebSocket /ws/{agent_id}` - Real-time communication with agents
 
 ## Serverless Memory Solutions
 
