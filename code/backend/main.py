@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, WebSocket, Body, Depends, Request, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, Body, Depends, Request, WebSocketDisconnect, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import APIKeyHeader
 from fastapi.websockets import WebSocketState
@@ -28,10 +28,10 @@ API_KEY = APIKeyHeader(name="X-API-Key", auto_error=False)
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:8080"],  # Frontend origin
+    allow_origins=["http://localhost:8080", "http://localhost:3000", "http://localhost:58957", "http://127.0.0.1:3000", "http://127.0.0.1:58957"],  # Allow multiple frontend origins
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"],
-    allow_headers=["Content-Type", "X-API-Key", "Accept"],
+    allow_headers=["*"],  # Allow all headers
     expose_headers=["*"],
     max_age=3600,  # Cache preflight requests for 1 hour
 )
@@ -59,15 +59,23 @@ class Agent(BaseModel):
     status: str
     created_at: Optional[datetime] = None
 
-class Message(BaseModel):
-    id: Optional[str] = None
-    agent_id: str
+class MessageBase(BaseModel):
     content: str
-    sender: str
-    timestamp: Optional[datetime] = None
-    token_count: Optional[int] = 0
-    message_type: Optional[str] = "text"  # text, system, error
-    status: Optional[str] = None  # success, error, pending
+    sender: str = "user"
+
+class MessageCreate(MessageBase):
+    pass
+
+class MessageInDB(MessageBase):
+    id: str
+    agent_id: str
+    timestamp: datetime
+    token_count: int = 0
+    message_type: str = "text"
+    status: str = "pending"
+
+    class Config:
+        arbitrary_types_allowed = True
 
 class Tool(BaseModel):
     id: str
@@ -218,7 +226,7 @@ async def get_agent(agent_id: str):
 async def get_tools():
     return list(tools.values())
 
-@app.get("/api/agents/{agent_id}/messages", response_model=List[Message])
+@app.get("/api/agents/{agent_id}/messages", response_model=List[MessageInDB])
 async def get_agent_messages(agent_id: str):
     agent_messages = [msg for msg in messages.values() if msg.agent_id == agent_id]
     return sorted(agent_messages, key=lambda x: x.timestamp)
@@ -235,7 +243,7 @@ async def process_message(agent_id: str, data: dict):
 
             # Create user message
             msg_id = str(len(messages) + 1)
-            user_msg = Message(
+            user_msg = MessageInDB(
                 id=msg_id,
                 agent_id=agent_id,
                 content=data['content'],
@@ -256,7 +264,7 @@ async def process_message(agent_id: str, data: dict):
             response_content = generate_agent_response(agent, data['content'])
             
             response_id = str(len(messages) + 1)
-            agent_msg = Message(
+            agent_msg = MessageInDB(
                 id=response_id,
                 agent_id=agent_id,
                 content=response_content,
@@ -319,47 +327,19 @@ async def process_message(agent_id: str, data: dict):
         return error_response
 
 def generate_agent_response(agent: Agent, user_message: str) -> str:
-    """Generate a contextual response based on agent's role and capabilities"""
-    
-    # Basic response templates based on agent role
-    responses = {
-        'Academic Research': [
-            f"Based on my research expertise, I can help you investigate {user_message[:30]}...",
-            f"Let me analyze your research question about {user_message[:30]}...",
-            f"From an academic perspective, your inquiry about {user_message[:30]}..."
-        ],
-        'Programming Assistant': [
-            f"Looking at your code question about {user_message[:30]}...",
-            f"I can help debug this issue with {user_message[:30]}...",
-            f"Let me analyze this programming challenge regarding {user_message[:30]}..."
-        ],
-        'Content Creation': [
-            f"I'll help you improve the writing about {user_message[:30]}...",
-            f"Let me suggest some edits for your content about {user_message[:30]}...",
-            f"I can enhance this text about {user_message[:30]}..."
-        ]
-    }
-
-    # Get response templates for the agent's role
-    role_responses = responses.get(agent.role, [
-        f"I understand your message about {user_message[:30]}...",
-        f"Let me help you with {user_message[:30]}...",
-        f"I'll assist you with your request about {user_message[:30]}..."
-    ])
-
-    # Select a random response template and generate a more detailed response
-    base_response = random.choice(role_responses)
-    capabilities_str = ", ".join(agent.capabilities[:2])  # Show first 2 capabilities
-    
-    full_response = (
-        f"{base_response}\n\n"
-        f"As {agent.name} with expertise in {capabilities_str}, "
-        f"I'll analyze your request and provide a detailed response. "
-        f"My goal is to {agent.goal.lower()}.\n\n"
-        f"Would you like me to focus on any specific aspect of your request?"
-    )
-
-    return full_response
+    try:
+        # Basic response generation based on agent role
+        responses = {
+            "Academic Research": f"As a Research Assistant, I can help you with: {', '.join(agent.capabilities)}. How can I assist with your research?",
+            "Programming Assistant": f"I'm your Code Helper with expertise in: {', '.join(agent.capabilities)}. What coding challenge can I help you with?",
+            "Content Creation": f"As a Writing Assistant, I specialize in: {', '.join(agent.capabilities)}. How can I help improve your writing?"
+        }
+        
+        return responses.get(agent.role, f"I am {agent.name}, how can I assist you?")
+        
+    except Exception as e:
+        logger.error(f"Error generating response: {str(e)}")
+        return "I apologize, but I'm having trouble processing your request at the moment. Could you please try again?"
 
 @app.websocket("/ws/{agent_id}")
 async def websocket_endpoint(websocket: WebSocket, agent_id: str):
@@ -388,28 +368,47 @@ async def websocket_endpoint(websocket: WebSocket, agent_id: str):
 async def messages_options():
     return {}  # Return empty dict for OPTIONS request
 
-@app.post("/api/agents/{agent_id}/messages", response_model=EnhancedResponse)
-async def create_message(agent_id: str, message: Message):
+class MessageRequest(BaseModel):
+    content: str
+    sender: str = "user"
+
+@app.post("/api/agents/{agent_id}/chat")
+async def chat_with_agent(
+    agent_id: str,
+    payload: Dict[str, Any]
+):
     try:
+        # Validate agent exists
         if agent_id not in agents:
-            raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
-        
-        # Validate message
-        if not message.content:
-            raise HTTPException(status_code=400, detail="Message content cannot be empty")
-        
-        # Process message
-        response = await process_message(agent_id, {
-            "type": "chat",
-            "content": message.content,
-            "sender": message.sender
-        })
-        
-        return response
-        
+            raise HTTPException(status_code=404, detail="Agent not found")
+
+        # Validate payload
+        if "content" not in payload:
+            raise HTTPException(status_code=400, detail="Message content is required")
+
+        # Generate agent response
+        agent = agents[agent_id]
+        response_content = generate_agent_response(agent, payload["content"])
+
+        # Create reasoning steps
+        reasoning_steps = [
+            ReasoningStep(step_number=1, content="Processed user message"),
+            ReasoningStep(step_number=2, content="Generated response based on agent role and capabilities")
+        ]
+
+        return {
+            "content": response_content,
+            "reasoning_steps": reasoning_steps
+        }
+
+    except HTTPException as he:
+        raise he
     except Exception as e:
         logger.error(f"Error processing message: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error processing message: {str(e)}"
+        )
 
 @app.get("/api/metrics")
 async def get_metrics():
