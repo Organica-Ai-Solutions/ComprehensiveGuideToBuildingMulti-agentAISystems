@@ -242,6 +242,102 @@ The API supports the following endpoints:
 * `GET /api/metrics` - Get system metrics
 * `WebSocket /ws/{agent_id}` - Real-time communication with agents
 
+## Frontend Monitoring and Dashboard Implementation
+
+A crucial aspect of managing multi-agent systems is having a robust monitoring dashboard. The dashboard provides real-time visibility into system metrics, agent states, and overall health. Here's how to implement a resilient dashboard:
+
+### 1. Core Metrics Display
+
+The dashboard should track essential metrics:
+
+* Active agents and their states
+* Message throughput
+* Memory usage
+* Context utilization
+* System health indicators
+
+### 2. Real-time Updates
+
+Implement periodic updates with error handling:
+
+```javascript
+async function updateMetricsDisplay() {
+    try {
+        const response = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.METRICS}`, {
+            headers: API_CONFIG.DEFAULT_HEADERS,
+            mode: 'cors',
+            cache: 'no-cache'
+        });
+        if (!response.ok) throw new Error('Failed to fetch metrics');
+        
+        const metrics = await response.json();
+        updateDashboardElements(metrics);
+    } catch (error) {
+        console.error('Error updating metrics:', error);
+        showError('metrics-section', `Failed to fetch metrics: ${error.message}`);
+    }
+}
+```
+
+### 3. Robust DOM Updates
+
+When updating the dashboard, always include null checks and error handling:
+
+```javascript
+function updateDashboardElements(metrics) {
+    // Get DOM elements with null checks
+    const elements = {
+        activeRoles: document.getElementById('active-roles'),
+        totalMessages: document.getElementById('total-messages'),
+        memoryObjects: document.getElementById('memory-objects'),
+        contextUsage: document.getElementById('context-usage')
+    };
+    
+    // Update elements if they exist
+    if (elements.activeRoles) {
+        elements.activeRoles.textContent = metrics.roles || '0';
+    }
+    if (elements.totalMessages) {
+        elements.totalMessages.textContent = metrics.messages || '0';
+    }
+    // ... additional updates
+}
+```
+
+### 4. Visual Feedback
+
+Implement clear visual indicators for system state:
+
+* Use color-coded status indicators
+* Show progress bars for utilization metrics
+* Provide clear error messages
+* Include loading states during updates
+
+### 5. Performance Considerations
+
+* Use request debouncing for frequent updates
+* Implement visibility-based updates (pause when tab is inactive)
+* Clean up resources and intervals when components unmount
+* Cache responses when appropriate
+
+### 6. Error Recovery
+
+Implement graceful error handling:
+
+* Show user-friendly error messages
+* Implement automatic retry logic
+* Provide manual refresh options
+* Maintain partial functionality when some metrics fail
+
+### 7. Monitoring Best Practices
+
+* Set up error tracking and logging
+* Monitor frontend performance metrics
+* Track user interactions and pain points
+* Implement analytics for usage patterns
+
+This robust implementation ensures that your dashboard remains stable and useful even under adverse conditions, providing reliable system monitoring for your multi-agent deployment.
+
 ## Serverless Memory Solutions
 
 Perhaps the biggest challenge with serverless functions is their ephemeral nature; local state is lost between invocations. Therefore, maintaining agent state, memory, and shared context (like in an MCP) requires leveraging external, often serverless-friendly, storage solutions.
