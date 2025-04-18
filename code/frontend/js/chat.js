@@ -6,8 +6,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Determine protocol (http vs https) and corresponding WS protocol (ws vs wss)
     const protocol = window.location.protocol === 'https:' ? 'https' : 'http';
     const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-    const hostname = window.location.hostname || 'localhost';
-    const port = '8000'; // Updated backend server port
+    const hostname = '127.0.0.1';  // Force IPv4 localhost
+    const port = '8000'; // Backend server port
     
     // Ensure we have our own API_CONFIG in this file
     const API_CONFIG = {
@@ -18,6 +18,17 @@ document.addEventListener('DOMContentLoaded', async () => {
             MESSAGES: '/api/messages',
             TOOLS: '/api/tools'
         }
+    };
+    
+    // Default fetch options for all API calls
+    const defaultFetchOptions = {
+        mode: 'cors',
+        cache: 'no-cache',
+        headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+        },
+        credentials: 'same-origin'
     };
     
     console.log("API Configuration:", API_CONFIG);
@@ -60,10 +71,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     let activeAgents = [];
     let availableTools = [];
     let selectedToolId = null;
-    let ws = null;
-    let wsReconnectTimer = null;
-    let wsConnectionAttempts = 0;
-    const MAX_RECONNECT_ATTEMPTS = 5;
+    let ws;
+    let wsReconnectAttempts = 0;
+    const MAX_WS_RECONNECT_ATTEMPTS = 5;
+    const WS_RECONNECT_DELAY = 2000;
     
     // Models configuration
     const availableModels = [
@@ -751,184 +762,130 @@ document.addEventListener('DOMContentLoaded', async () => {
     // --- WebSocket Connection ---
     function setupWebSocket() {
         if (!currentAgentId) {
-            console.log("No agent ID specified, skipping WebSocket setup");
-            addSystemMessage("No agent selected. Select an agent or try refreshing the page.", "warning");
+            console.warn('No agent ID specified for WebSocket connection');
             return;
         }
-        
-        cleanupWebSocket();
-        
-        try {
-            // Increment connection attempts before attempting connection
-            wsConnectionAttempts++;
-            
-            const wsUrl = `${API_CONFIG.WS_URL}/ws/${currentAgentId}`;
-            console.log(`Setting up WebSocket connection to ${wsUrl} (Attempt ${wsConnectionAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
-            
-            // Add a message to the UI to show connection attempt
-            if (wsConnectionAttempts > 1) {
-                addSystemMessage(`Attempting to connect... (${wsConnectionAttempts}/${MAX_RECONNECT_ATTEMPTS})`, "info");
-            }
-            
-            ws = new WebSocket(wsUrl);
-            
-            // Set timeout to handle connection timeout
-            const connectionTimeout = setTimeout(() => {
-                if (ws && ws.readyState !== WebSocket.OPEN) {
-                    console.log("WebSocket connection timeout");
-                    ws.close();
-                }
-            }, 10000); // 10 second timeout
-            
-            ws.onopen = () => {
-                console.log("WebSocket connection established");
-                clearTimeout(connectionTimeout);
-                wsConnectionAttempts = 0;
-                clearTimeout(wsReconnectTimer);
-                addSystemMessage("Realtime connection established", "success");
-                
-                // Enable the send button once connection is established
-                if (sendButton) {
-                    sendButton.disabled = false;
-                }
-            };
-            
-            ws.onmessage = (event) => {
-                try {
-                    const data = JSON.parse(event.data);
-                    console.log("WebSocket message received:", data);
-                    
-                    // More verbose logging to debug exact message structure
-                    console.log("Message type:", data.type);
-                    console.log("Message content:", data.content);
-                    console.log("Message sender:", data.sender);
-                    
-                    if (data.type === 'message' && data.sender === 'agent') {
-                        // Handle agent message
-                        console.log("Received agent message");
-                        
-                        // Check if message contains tool usage
-                        if (data.tool_usage) {
-                            handleToolUsageInMessage(data);
-                        }
-                        
-                        // Check for reasoning steps
-                        if (data.reasoning_steps && data.reasoning_steps.length > 0) {
-                            data.reasoning_steps.forEach(step => addReasoningStep(step));
-                        }
-                        
-                        // Handle context chain
-                        if (data.context_chain) {
-                            updateContextChain(data.context_chain);
-                        }
-                        
-                        addAgentMessage(data.content);
-                    } else if (data.type === 'system') {
-                        // Handle system message
-                        console.log("Received system message:", data.content);
-                        addSystemMessage(data.content, data.message_type || 'info');
-                    } else if (data.type === 'thinking') {
-                        // Show thinking indicator
-                        console.log("Agent is thinking...");
-                    } else if (data.type === 'error') {
-                        handleWebSocketError(data);
-                    } else {
-                        // Fallback for any other message type
-                        console.log("Received unknown message type:", data.type);
-                        if (data.content) {
-                            addAgentMessage(data.content);
-                        }
-                    }
-                } catch (error) {
-                    console.error("Error processing WebSocket message:", error, event.data);
-                }
-            };
-            
-            ws.onclose = (event) => {
-                clearTimeout(connectionTimeout);
-                console.log(`WebSocket connection closed: ${event.code} ${event.reason}`);
-                ws = null;
-                
-                // If the close wasn't initiated by the user and we haven't exceeded max attempts
-                if (wsConnectionAttempts < MAX_RECONNECT_ATTEMPTS) {
-                    scheduleReconnect();
-                } else if (wsConnectionAttempts >= MAX_RECONNECT_ATTEMPTS) {
-                    addSystemMessage(`Could not establish connection to the backend server. Please check if the server is running on port ${API_CONFIG.WS_URL.split(':')[2] || 8080}.`, "error");
-                    console.log("Max reconnection attempts reached, giving up.");
-                }
-            };
-            
-            ws.onerror = (error) => {
-                clearTimeout(connectionTimeout);
-                console.error("WebSocket error:", error);
-                
-                // Do not show error message for each attempt to avoid spamming the UI
-                if (wsConnectionAttempts <= 1) {
-                    addSystemMessage("Connection error. Please make sure the backend server is running.", "warning");
-                }
-                
-                // The onclose handler will be called after this
-            };
-        } catch (error) {
-            console.error("Error setting up WebSocket:", error);
-            addSystemMessage("Failed to establish connection to the backend server.", "error");
-        }
-    }
-    
-    function handleWebSocketError(data) {
-        const errorMessage = data.content || "An unknown error occurred";
-        console.error("WebSocket error message:", errorMessage);
-        addSystemMessage(errorMessage, "error");
-    }
-    
-    function scheduleReconnect() {
-        // Clear any existing reconnect timer
-        if (wsReconnectTimer) {
-            clearTimeout(wsReconnectTimer);
-        }
-        
-        // Increase backoff time based on attempts (capped at 10 seconds)
-        const backoffTime = Math.min(1000 * Math.pow(1.5, wsConnectionAttempts), 10000);
-        
-        // Only schedule if page is visible and we haven't exceeded maximum attempts
-        if (document.visibilityState === 'visible' && wsConnectionAttempts < MAX_RECONNECT_ATTEMPTS) {
-            wsReconnectTimer = setTimeout(() => {
-                if (document.visibilityState === 'visible') {
-                    setupWebSocket();
-                }
-            }, backoffTime);
-            
-            console.log(`Scheduled reconnect in ${backoffTime}ms (attempt ${wsConnectionAttempts})`);
-        }
-    }
-    
-    function cleanupWebSocket() {
-        // Clear any pending reconnect
-        if (wsReconnectTimer) {
-            clearTimeout(wsReconnectTimer);
-            wsReconnectTimer = null;
-        }
-        
-        // Close existing WebSocket connection properly
+
+        // Clean up existing connection if any
         if (ws) {
-            // Remove all listeners to prevent memory leaks
-            ws.onopen = null;
-            ws.onmessage = null;
-            ws.onclose = null;
-            ws.onerror = null;
-            
-            // Check if connection is still open before closing
-            if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
-                try {
-                    ws.close(1000, "Client disconnecting");
-                } catch (error) {
-                    console.error("Error closing WebSocket:", error);
-                }
-            }
-            
+            console.log('Closing existing WebSocket connection');
+            ws.close();
             ws = null;
         }
+
+        const wsUrl = `${API_CONFIG.WS_URL}/ws/${currentAgentId}`;
+        console.log('Setting up WebSocket connection:', wsUrl);
+
+        try {
+            ws = new WebSocket(wsUrl);
+
+            // Connection timeout
+            const connectionTimeout = setTimeout(() => {
+                if (ws.readyState !== WebSocket.OPEN) {
+                    console.warn('WebSocket connection timeout');
+                    ws.close();
+                    handleWebSocketError(new Error('Connection timeout'));
+                }
+            }, 10000);
+
+            ws.onopen = () => {
+                console.log('WebSocket connection established');
+                clearTimeout(connectionTimeout);
+                wsReconnectAttempts = 0; // Reset reconnection attempts on successful connection
+                addSystemMessage('Connected to agent', 'success');
+            };
+
+            ws.onclose = (event) => {
+                clearTimeout(connectionTimeout);
+                console.log('WebSocket connection closed:', event.code, event.reason);
+                
+                if (wsReconnectAttempts < MAX_WS_RECONNECT_ATTEMPTS) {
+                    wsReconnectAttempts++;
+                    const delay = WS_RECONNECT_DELAY * Math.pow(2, wsReconnectAttempts - 1);
+                    console.log(`Attempting to reconnect (${wsReconnectAttempts}/${MAX_WS_RECONNECT_ATTEMPTS}) in ${delay/1000}s...`);
+                    addSystemMessage(`Connection lost. Reconnecting in ${delay/1000}s...`, 'warning');
+                    
+                    setTimeout(() => {
+                        if (document.visibilityState === 'visible') {
+                            setupWebSocket();
+                        }
+                    }, delay);
+                } else {
+                    console.error('Max reconnection attempts reached');
+                    addSystemMessage('Could not reconnect to agent. Please refresh the page.', 'error');
+                }
+            };
+
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+                handleWebSocketError(error);
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    const message = JSON.parse(event.data);
+                    handleWebSocketMessage(message);
+                } catch (error) {
+                    console.error('Error processing WebSocket message:', error);
+                    addSystemMessage('Error processing message from agent', 'error');
+                }
+            };
+
+        } catch (error) {
+            console.error('Error setting up WebSocket:', error);
+            handleWebSocketError(error);
+        }
     }
+
+    function handleWebSocketError(error) {
+        if (wsReconnectAttempts < MAX_WS_RECONNECT_ATTEMPTS) {
+            // Error will trigger onclose which handles reconnection
+            if (ws) ws.close();
+        } else {
+            addSystemMessage('Connection error. Please refresh the page.', 'error');
+        }
+    }
+
+    function handleWebSocketMessage(message) {
+        if (!message || !message.type) {
+            console.warn('Invalid message format:', message);
+            return;
+        }
+
+        switch (message.type) {
+            case 'agent_message':
+                addAgentMessage(message.content, message.role || 'AI');
+                break;
+            case 'system_message':
+                addSystemMessage(message.content, message.level || 'info');
+                break;
+            case 'error':
+                addSystemMessage(message.content, 'error');
+                break;
+            case 'typing_indicator':
+                updateTypingIndicator(message.isTyping);
+                break;
+            default:
+                console.warn('Unknown message type:', message.type);
+        }
+    }
+
+    // Visibility change handler for WebSocket
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                console.log('Page visible, attempting to reconnect WebSocket');
+                wsReconnectAttempts = 0; // Reset attempts when user returns to page
+                setupWebSocket();
+            }
+        } else {
+            console.log('Page hidden, closing WebSocket connection');
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+        }
+    });
     
     // --- Message Handling ---
     async function sendMessage(message) {
@@ -1128,6 +1085,30 @@ document.addEventListener('DOMContentLoaded', async () => {
         addSystemMessage("Failed to initialize chat. Please try refreshing the page.", "error");
     });
     
+    // Utility function for retrying failed fetch requests
+    async function retryFetch(url, options, maxRetries = 3, delay = 2000) {
+        let lastError;
+        
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                const response = await fetch(url, options);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response;
+            } catch (error) {
+                lastError = error;
+                if (attempt === maxRetries) {
+                    break;
+                }
+                console.warn(`Attempt ${attempt}/${maxRetries} failed. Retrying in ${delay/1000}s...`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+            }
+        }
+        
+        throw lastError;
+    }
+
     // --- Data Loading ---
     async function loadInitialData() {
         try {
@@ -1139,84 +1120,45 @@ document.addEventListener('DOMContentLoaded', async () => {
                 throw new Error("API configuration is missing or invalid. Check if base.js is loaded correctly.");
             }
             
-            console.log("Using API config:", API_CONFIG);
-            
-            // Check backend connectivity first
+            // Check backend health
             try {
-                const pingResponse = await fetch(`${API_CONFIG.BASE_URL}/api/agents`, {
-                    method: 'HEAD',
-                    headers: { 'Accept': 'application/json' },
-                    mode: 'cors',
-                    cache: 'no-cache'
+                const healthResponse = await retryFetch(`${API_CONFIG.BASE_URL}/api/health`, {
+                    ...defaultFetchOptions,
+                    method: 'GET'
                 });
                 
-                if (!pingResponse.ok) {
-                    const statusMessage = pingResponse.status === 404 ? 'API endpoint not found' : 
-                                         pingResponse.status === 500 ? 'Server error' :
-                                         `Error code: ${pingResponse.status}`;
-                    
-                    addSystemMessage(`Backend connection issue: ${statusMessage}. Using offline mode with simulated data.`, "warning");
-                    console.warn(`Backend connectivity check failed: ${pingResponse.status} ${pingResponse.statusText}`);
-                    
-                    // Load default/simulated data
-                    loadSimulatedData();
-                    return;
+                const healthData = await healthResponse.json();
+                if (healthData.status !== 'ok') {
+                    throw new Error('Backend health check failed');
                 }
-            } catch (connectionError) {
-                console.error("Backend connectivity check failed:", connectionError);
-                addSystemMessage(`Cannot connect to backend at ${API_CONFIG.BASE_URL}. Check if the server is running. Using offline mode.`, "error");
-                
-                // Load default/simulated data
+            } catch (error) {
+                console.error("Backend health check failed:", error);
+                addSystemMessage(`Cannot connect to backend. Using offline mode.`, "error");
                 loadSimulatedData();
                 return;
             }
             
-            // Load agents
-            let agents = [];
+            // Load agents with retry
             try {
-                console.log("Fetching agents from:", `${API_CONFIG.BASE_URL}/api/agents`);
-                const agentsResponse = await fetch(`${API_CONFIG.BASE_URL}/api/agents`, {
-                    headers: { 'Accept': 'application/json' },
-                    mode: 'cors',
-                    cache: 'no-cache'
+                const agentsResponse = await retryFetch(`${API_CONFIG.BASE_URL}/api/agents`, {
+                    ...defaultFetchOptions
                 });
                 
-                if (!agentsResponse.ok) {
-                    throw new Error(`Error fetching agents: ${agentsResponse.status} ${agentsResponse.statusText}`);
-                }
-                
-                agents = await agentsResponse.json();
+                const agents = await agentsResponse.json();
                 console.log("Agents loaded:", agents);
                 activeAgents = agents;
                 displayAgents(agents);
             } catch (error) {
                 console.error("Error loading agents:", error);
-                addSystemMessage(`Could not load agents. Backend server may be down or inaccessible. Using default agents instead.`, "warning");
-                
-                // Add default agents for UI testing
-                const defaultAgents = [
-                    { id: '1', name: 'Assistant', status: 'active', description: 'General purpose assistant' },
-                    { id: '2', name: 'Researcher', status: 'active', description: 'Specialized in research tasks' },
-                    { id: '3', name: 'Coder', status: 'idle', description: 'Programming and code analysis' }
-                ];
-                
-                activeAgents = defaultAgents;
-                displayAgents(defaultAgents);
-                // Don't return, continue loading other components
+                addSystemMessage(`Could not load agents. Using default agents.`, "warning");
+                loadSimulatedData();
             }
             
-            // Load tools
+            // Load tools with retry
             try {
-                console.log("Fetching tools from:", `${API_CONFIG.BASE_URL}/api/tools`);
-                const toolsResponse = await fetch(`${API_CONFIG.BASE_URL}/api/tools`, {
-                    headers: { 'Accept': 'application/json' },
-                    mode: 'cors',
-                    cache: 'no-cache'
+                const toolsResponse = await retryFetch(`${API_CONFIG.BASE_URL}/api/tools`, {
+                    ...defaultFetchOptions
                 });
-                
-                if (!toolsResponse.ok) {
-                    throw new Error(`Error fetching tools: ${toolsResponse.status} ${toolsResponse.statusText}`);
-                }
                 
                 const tools = await toolsResponse.json();
                 console.log("Tools loaded:", tools);
@@ -1224,70 +1166,45 @@ document.addEventListener('DOMContentLoaded', async () => {
                 displayToolIcons(tools);
             } catch (error) {
                 console.error("Error loading tools:", error);
-                addSystemMessage(`Could not load tools. Using default tools instead.`, "warning");
-                
-                // Add default tools for UI testing
-                const defaultTools = [
-                    { id: '1', name: 'Web Search', description: 'Search the web for information', api_endpoint: '/api/tools/search' },
-                    { id: '2', name: 'Calculator', description: 'Perform calculations', api_endpoint: '/api/tools/calculator' },
-                    { id: '3', name: 'Code Analysis', description: 'Analyze code and provide suggestions', api_endpoint: '/api/tools/code' },
-                    { id: '4', name: 'Weather', description: 'Get weather information', api_endpoint: '/api/tools/weather' }
-                ];
-                
-                availableTools = defaultTools;
-                displayToolIcons(defaultTools);
-                // Continue anyway as this is not critical
+                addSystemMessage(`Could not load tools. Using default tools.`, "warning");
+                // Continue with default tools from loadSimulatedData
             }
             
-            // Load previous messages if an agent is selected
+            // Load messages if agent selected
             if (currentAgentId) {
-                console.log("Fetching messages for agent:", currentAgentId);
                 try {
-                    const messagesResponse = await fetch(`${API_CONFIG.BASE_URL}/api/agents/${currentAgentId}/messages`, {
-                        headers: { 'Accept': 'application/json' },
-                        mode: 'cors',
-                        cache: 'no-cache'
+                    const messagesResponse = await retryFetch(
+                        `${API_CONFIG.BASE_URL}/api/agents/${currentAgentId}/messages`,
+                        { ...defaultFetchOptions }
+                    );
+                    
+                    const messages = await messagesResponse.json();
+                    chatMessages.innerHTML = '';
+                    messages.forEach(msg => {
+                        if (msg.sender === 'user') {
+                            addUserMessage(msg.content);
+                        } else {
+                            addAgentMessage(msg.content, "AI");
+                        }
                     });
                     
-                    if (messagesResponse.ok) {
-                        const messages = await messagesResponse.json();
-                        
-                        // Clear existing messages
-                        chatMessages.innerHTML = '';
-                        
-                        // Display messages in order
-                        messages.forEach(msg => {
-                            if (msg.sender === 'user') {
-                                addUserMessage(msg.content);
-                            } else {
-                                addAgentMessage(msg.content, "AI");
-                            }
-                        });
-                        
-                        // Set current agent name
-                        const currentAgent = activeAgents.find(a => a.id === currentAgentId);
-                        if (currentAgent) {
-                            currentAgentName.textContent = currentAgent.name;
-                        }
-                    } else {
-                        // If we can't load messages, just show a welcome message
-                        console.warn(`Failed to load messages: ${messagesResponse.status} ${messagesResponse.statusText}`);
-                        addSystemMessage(`Connected to agent. Start a conversation!`);
+                    const currentAgent = activeAgents.find(a => a.id === currentAgentId);
+                    if (currentAgent) {
+                        currentAgentName.textContent = currentAgent.name;
                     }
                 } catch (error) {
                     console.error("Error loading messages:", error);
                     addSystemMessage(`Could not load previous messages. Starting new conversation.`, "warning");
                 }
                 
-                // Setup WebSocket for real-time updates
                 setupWebSocket();
             } else {
-                // No agent selected, show welcome message
                 addSystemMessage("Select an agent from the sidebar to start chatting");
             }
         } catch (error) {
-            console.error("Error loading initial data:", error);
-            addSystemMessage(`Could not load necessary data: ${error.message}. Please check if the backend server is running.`, "error");
+            console.error("Error in loadInitialData:", error);
+            addSystemMessage(`Initialization failed: ${error.message}. Using offline mode.`, "error");
+            loadSimulatedData();
         }
     }
     

@@ -1,0 +1,35 @@
+---
+description:
+globs:
+alwaysApply: true
+---
+
+# Your rule content
+
+- You can @ files here
+- You can use markdown but dont have to
+
+# Testing Requirements
+
+## Functionality Testing
+1. Verify all existing UI interactions work:
+   - Navigation
+   - Form submissions
+   - Data display
+   - Error handling
+
+2. Validate new features:
+   - Token counting
+   - Metrics tracking
+   - Real-time updates
+
+## Regression Testing
+1. UI Consistency:
+   - All components render correctly
+   - Styles remain unchanged
+   - Responsive behavior maintained
+
+2. API Compatibility:
+   - All endpoints return expected formats
+   - Error handling remains consistent
+   - Backward compatibility maintained

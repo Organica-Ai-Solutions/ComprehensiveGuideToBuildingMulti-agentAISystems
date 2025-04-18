@@ -12,6 +12,14 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
     }
 
+    // Default fetch options for all API calls
+    const defaultFetchOptions = {
+        mode: 'cors',
+        cache: 'no-cache',
+        headers: API_CONFIG.DEFAULT_HEADERS,
+        credentials: 'include'  // Changed from 'same-origin' to 'include' for CORS
+    };
+
     // --- DOM Element References ---
     // Lists
     const agentListElement = document.getElementById('agent-list');
@@ -69,6 +77,16 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Chart reference
     let contextHistoryChart = null;
+
+    // Initialize data fetching AFTER DOM elements are initialized
+    fetchAgents();
+    fetchTools();
+    updateRealMcpDisplay();
+
+    // Set up refresh intervals
+    setInterval(updateRealMcpDisplay, 30000); // Update MCP display every 30 seconds
+    setInterval(fetchAgents, 60000); // Update agents every minute
+    setInterval(fetchTools, 120000); // Update tools every 2 minutes
 
     // --- Utility Functions ---
     function showError(elementId, message) {
@@ -136,16 +154,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Agents
     async function fetchAgents() {
+        if (!agentListElement || !activeAgentsCountElement) {
+            console.warn('Required DOM elements for agents not found');
+            return;
+        }
         showLoading(agentListElement);
         activeAgentsCountElement.textContent = '...';
         try {
-            const response = await fetch(`${API_CONFIG.BASE_URL}/api/agents`);
+            const response = await fetch(`${API_CONFIG.BASE_URL}/api/agents`, {
+                ...defaultFetchOptions,
+                method: 'GET'
+            });
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
             const data = await response.json();
-            allAgents = data; // Store globally
+            allAgents = data;
             filterAndRenderAgents();
             updateAgentDropdown();
-            updateSystemStatus('online', 'System Online'); // Assume online if agents fetch works
+            updateSystemStatus('online', 'System Online');
         } catch (error) {
             console.error("Error fetching agents:", error);
             agentListElement.innerHTML = '';
@@ -330,49 +355,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Tools 
     async function fetchTools() {
+        if (!toolListElement || !availableToolsCountElement) {
+            console.warn('Required DOM elements for tools not found');
+            return;
+        }
+        showLoading(toolListElement);
+        availableToolsCountElement.textContent = '...';
         try {
-            console.log("Fetching tools from:", `${API_CONFIG.BASE_URL}/api/tools`);
-            
             const response = await fetch(`${API_CONFIG.BASE_URL}/api/tools`, {
-                method: 'GET',
-                headers: { 'Content-Type': 'application/json' }
+                ...defaultFetchOptions,
+                method: 'GET'
             });
-            
-            if (!response.ok) {
-                let errorMessage = '';
-                try {
-                    const errorData = await response.json();
-                    errorMessage = errorData.detail || `Error ${response.status}`;
-                } catch (e) {
-                    errorMessage = await response.text() || `Error ${response.status}`;
-                }
-                
-                console.error("Failed to fetch tools:", response.status, errorMessage);
-                showError('tool-list', `Failed to fetch tools: ${errorMessage}`);
-                return;
-            }
-            
-            const tools = await response.json();
-            console.log("Tools fetched:", tools);
-            
-            // Clear the tools list
-            const toolList = document.getElementById('tool-list');
-            toolList.innerHTML = '';
-            
-            if (tools.length === 0) {
-                toolList.innerHTML = '<div class="text-muted text-center p-3">No tools available</div>';
-                return;
-            }
-            
-            // Add each tool to the list
-            tools.forEach(tool => {
-                const toolCard = createToolCard(tool);
-                toolList.appendChild(toolCard);
-            });
-            
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const data = await response.json();
+            allTools = data;
+            filterAndRenderTools();
         } catch (error) {
             console.error("Error fetching tools:", error);
-            showError('tool-list', `Network error fetching tools: ${error.message}`);
+            toolListElement.innerHTML = '';
+            showError('tool-list', `Failed to load tools: ${error.message}`);
+            availableToolsCountElement.textContent = 'Err';
         }
     }
 
@@ -426,11 +428,14 @@ document.addEventListener('DOMContentLoaded', () => {
     // Real MCP Status with API data
     function updateRealMcpDisplay() {
         if (!rolesCountElement || !messagesCountElement || !memoryCountElement || !contextUsageBarElement) {
+            console.warn('Required DOM elements for MCP display not found');
             return;
         }
         
-        // Fetch real metrics from the API
-        fetch(`${API_CONFIG.BASE_URL}/api/metrics`)
+        fetch(`${API_CONFIG.BASE_URL}/api/metrics`, {
+            ...defaultFetchOptions,
+            method: 'GET'
+        })
             .then(response => {
                 if (!response.ok) {
                     throw new Error(`HTTP error ${response.status}`);
@@ -438,48 +443,26 @@ document.addEventListener('DOMContentLoaded', () => {
                 return response.json();
             })
             .then(data => {
-                // Get current values from API
                 const rolesCount = allAgents.length || 0;
-                
-                // Update DOM elements with real data
                 rolesCountElement.textContent = rolesCount;
                 
-                // Use metrics data from API for messages and memory
                 if (messagesCountElement) messagesCountElement.textContent = data.active_sessions || 0;
                 if (memoryCountElement) memoryCountElement.textContent = data.active_agents || 0;
                 
-                // Calculate real context usage based on API data
-                const contextTotal = 4096; // Maximum context window size
+                const contextTotal = 4096;
                 const contextUsed = data.total_tokens || 0;
                 const usagePercent = Math.min(100, Math.round((contextUsed / contextTotal) * 100));
                 
-                // Update UI elements
                 contextUsageBarElement.style.width = `${usagePercent}%`;
                 contextUsageBarElement.textContent = `${usagePercent}%`;
                 contextUsageBarElement.setAttribute('aria-valuenow', usagePercent);
                 
                 if (contextUsedElement) contextUsedElement.textContent = contextUsed.toLocaleString();
                 if (contextTotalElement) contextTotalElement.textContent = contextTotal.toLocaleString();
-                document.getElementById('context-usage-text').textContent = `${contextUsed.toLocaleString()} / ${contextTotal.toLocaleString()} tokens`;
-                
-                // Set color based on usage
-                if (usagePercent > 80) {
-                    contextUsageBarElement.classList.remove('bg-success', 'bg-warning');
-                    contextUsageBarElement.classList.add('bg-danger');
-                } else if (usagePercent > 50) {
-                    contextUsageBarElement.classList.remove('bg-success', 'bg-danger');
-                    contextUsageBarElement.classList.add('bg-warning');
-                } else {
-                    contextUsageBarElement.classList.remove('bg-warning', 'bg-danger');
-                    contextUsageBarElement.classList.add('bg-success');
-                }
-                
-                // Update chart with real data
-                updateContextHistoryChart(usagePercent);
             })
             .catch(error => {
                 console.error("Error fetching metrics:", error);
-                showError('mcp-stats', `Failed to load metrics: ${error.message}`);
+                showError('mcp-metrics', `Failed to load metrics: ${error.message}`);
             });
     }
     
@@ -699,137 +682,100 @@ document.addEventListener('DOMContentLoaded', () => {
         mcpRefreshBtn.addEventListener('click', updateRealMcpDisplay);
     }
     
+    // Security Feed Functions
+    async function updateSecurityFeed() {
+        try {
+            const response = await fetch(`${API_CONFIG.BASE_URL}/api/security/events`, {
+                ...defaultFetchOptions,
+                method: 'GET'
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            
+            const data = await response.json();
+            return data.events || [];
+        } catch (error) {
+            console.warn('Failed to fetch security events:', error);
+            // Return mock data for development/fallback
+            return [{
+                type: 'System Status',
+                timestamp: new Date().toISOString(),
+                description: 'Security feed unavailable. Using offline mode.',
+                ip: 'localhost'
+            }];
+        }
+    }
+
+    // Check backend connectivity before making API calls
+    async function checkBackendConnectivity() {
+        try {
+            const response = await fetch(`${API_CONFIG.BASE_URL}/api/health`, {
+                ...defaultFetchOptions,
+                method: 'GET'
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            
+            const data = await response.json();
+            if (data.status === 'ok') {
+                console.log('Backend connectivity check passed');
+                return true;
+            }
+            throw new Error('Backend health check failed');
+        } catch (error) {
+            console.error('Backend connectivity check failed:', error);
+            showError('system-status', `Backend connectivity error: ${error.message}`);
+            updateSystemStatus('error', 'Backend Error');
+            return false;
+        }
+    }
+
+    // Modified loadAllData to check connectivity first
+    async function loadAllData() {
+        cleanupCharts();
+        
+        // Check backend connectivity first
+        const isConnected = await checkBackendConnectivity();
+        if (!isConnected) {
+            showError('system-status', 'Cannot connect to backend. Please check your connection and try again.');
+            return;
+        }
+        
+        fetchAgents();
+        fetchTools();
+        
+        // Only start MCP updates if the chart exists on the page
+        if (document.getElementById('context-history-chart')) {
+            startMcpUpdates();
+        }
+    }
+    
     // Initial data fetch
     loadAllData();
 
-    // Add security metrics section
-    function initSecurityDashboard() {
-        fetch(`${API_CONFIG.BASE_URL}/api/security-metrics`)
-            .then(response => response.json())
-            .then(data => {
-                renderRateLimitChart(data.rate_limits);
-                renderRequestMap(data.geo_data);
-                updateThreatFeed(data.recent_blocks);
-            })
-            .catch(error => {
-                console.error("Error fetching security metrics:", error);
-                showError('security-metrics', `Failed to load security metrics: ${error.message}`);
-            });
-    }
-    
-    function renderRateLimitChart(rateLimitData) {
-        const chartElement = document.getElementById('rate-limit-chart');
-        if (!chartElement || !window.Chart) return;
-        
-        // Transform data for chart
-        const labels = rateLimitData.map(item => item.endpoint);
-        const requestCounts = rateLimitData.map(item => item.requests);
-        const errorCounts = rateLimitData.map(item => item.errors);
-        
-        const ctx = chartElement.getContext('2d');
-        new Chart(ctx, {
-            type: 'bar',
-            data: {
-                labels: labels,
-                datasets: [
-                    {
-                        label: 'Requests',
-                        data: requestCounts,
-                        backgroundColor: 'rgba(75, 192, 192, 0.6)',
-                        borderColor: 'rgba(75, 192, 192, 1)',
-                        borderWidth: 1
-                    },
-                    {
-                        label: 'Errors',
-                        data: errorCounts,
-                        backgroundColor: 'rgba(255, 99, 132, 0.6)',
-                        borderColor: 'rgba(255, 99, 132, 1)',
-                        borderWidth: 1
-                    }
-                ]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    title: {
-                        display: true,
-                        text: 'API Rate Limits & Errors'
-                    }
-                },
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        title: {
-                            display: true,
-                            text: 'Count'
-                        }
-                    }
-                }
-            }
-        });
-    }
-    
-    function renderRequestMap(geoData) {
-        const mapElement = document.getElementById('request-map');
-        if (!mapElement) return;
-        
-        // Simple visualization without actual map
-        mapElement.innerHTML = `
-            <div class="card h-100">
-                <div class="card-header">
-                    <h6 class="m-0 font-weight-bold">Request Geographic Distribution</h6>
-                </div>
-                <div class="card-body">
-                    <div class="table-responsive">
-                        <table class="table table-sm table-hover">
-                            <thead>
-                                <tr>
-                                    <th>IP Address</th>
-                                    <th>Requests</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${geoData.map(item => `
-                                    <tr>
-                                        <td>${item.client_ip}</td>
-                                        <td>${item.requests}</td>
-                                    </tr>
-                                `).join('')}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        `;
-    }
-    
-    function updateThreatFeed(blockData) {
-        const feedElement = document.getElementById('threat-feed');
-        if (!feedElement) return;
-        
-        if (!blockData || blockData.length === 0) {
-            feedElement.innerHTML = `
-                <div class="card h-100">
-                    <div class="card-header">
-                        <h6 class="m-0 font-weight-bold">Security Events</h6>
-                    </div>
-                    <div class="card-body">
-                        <p class="text-center text-muted">No security events detected</p>
-                    </div>
-                </div>
-            `;
+    // Initialize security feed with better error handling
+    updateSecurityFeed().then(blockData => {
+        const feedElement = document.getElementById('security-feed');
+        if (!feedElement) {
+            console.warn('Security feed element not found');
             return;
         }
         
         feedElement.innerHTML = `
             <div class="card h-100">
-                <div class="card-header">
+                <div class="card-header d-flex justify-content-between align-items-center">
                     <h6 class="m-0 font-weight-bold">Security Events</h6>
+                    <button class="btn btn-sm btn-outline-secondary refresh-security-feed" title="Refresh security feed">
+                        <i class="bi bi-arrow-clockwise"></i>
+                    </button>
                 </div>
                 <div class="card-body">
                     <div class="list-group security-feed">
-                        ${blockData.map(item => `
+                        ${blockData.length ? blockData.map(item => `
                             <div class="list-group-item list-group-item-action flex-column align-items-start p-2">
                                 <div class="d-flex w-100 justify-content-between">
                                     <h6 class="mb-1">${item.type || 'Unknown'}</h6>
@@ -838,155 +784,42 @@ document.addEventListener('DOMContentLoaded', () => {
                                 <p class="mb-1 small">${item.description || 'No details available'}</p>
                                 <small class="text-danger">IP: ${item.ip || 'Unknown'}</small>
                             </div>
-                        `).join('')}
+                        `).join('') : `
+                            <div class="list-group-item text-center text-muted">
+                                <i class="bi bi-shield-check"></i> No security events to display
+                            </div>
+                        `}
                     </div>
                 </div>
             </div>
         `;
-    }
-    
-    // Initialize token usage metrics
-    function initTokenUsageMetrics() {
-        fetch(`${API_CONFIG.BASE_URL}/api/token-metrics`)
-            .then(response => response.json())
-            .then(data => {
-                renderTokenHistory(data.token_history);
-                updateTokenSummary(data);
-            })
-            .catch(error => {
-                console.error("Error fetching token metrics:", error);
-                showError('token-metrics', `Failed to load token metrics: ${error.message}`);
+
+        // Add refresh button handler
+        const refreshBtn = feedElement.querySelector('.refresh-security-feed');
+        if (refreshBtn) {
+            refreshBtn.addEventListener('click', () => {
+                refreshBtn.disabled = true;
+                refreshBtn.querySelector('i').classList.add('spin');
+                updateSecurityFeed().then(newData => {
+                    // Update only the list group content
+                    const listGroup = feedElement.querySelector('.security-feed');
+                    if (listGroup) {
+                        listGroup.innerHTML = newData.map(item => `
+                            <div class="list-group-item list-group-item-action flex-column align-items-start p-2">
+                                <div class="d-flex w-100 justify-content-between">
+                                    <h6 class="mb-1">${item.type || 'Unknown'}</h6>
+                                    <small>${new Date(item.timestamp).toLocaleTimeString()}</small>
+                                </div>
+                                <p class="mb-1 small">${item.description || 'No details available'}</p>
+                                <small class="text-danger">IP: ${item.ip || 'Unknown'}</small>
+                            </div>
+                        `).join('');
+                    }
+                }).finally(() => {
+                    refreshBtn.disabled = false;
+                    refreshBtn.querySelector('i').classList.remove('spin');
+                });
             });
-    }
-    
-    function renderTokenHistory(tokenHistory) {
-        const chartElement = document.getElementById('token-history-chart');
-        if (!chartElement || !window.Chart) return;
-        
-        // Transform data for chart
-        const labels = tokenHistory.map(item => item.day);
-        const tokenCounts = tokenHistory.map(item => item.daily_tokens);
-        
-        const ctx = chartElement.getContext('2d');
-        new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: labels,
-                datasets: [
-                    {
-                        label: 'Daily Token Usage',
-                        data: tokenCounts,
-                        backgroundColor: 'rgba(75, 192, 192, 0.2)',
-                        borderColor: 'rgba(75, 192, 192, 1)',
-                        borderWidth: 2,
-                        tension: 0.4,
-                        fill: true
-                    }
-                ]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    title: {
-                        display: true,
-                        text: 'Token Usage History (7 Days)'
-                    },
-                    tooltip: {
-                        callbacks: {
-                            label: (context) => `Tokens: ${context.parsed.y.toLocaleString()}`
-                        }
-                    }
-                },
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        title: {
-                            display: true,
-                            text: 'Tokens'
-                        }
-                    }
-                }
-            }
-        });
-    }
-    
-    function updateTokenSummary(data) {
-        // Update the summary metrics
-        const totalTokensElement = document.getElementById('total-tokens-count');
-        const sessionTokensElement = document.getElementById('session-tokens-count');
-        const avgTokensElement = document.getElementById('avg-tokens-count');
-        const tokenUsageBarElement = document.getElementById('token-usage-bar');
-        const tokenUsagePercentElement = document.getElementById('token-usage-percent');
-        
-        if (totalTokensElement) totalTokensElement.textContent = data.total_tokens.toLocaleString();
-        if (sessionTokensElement) sessionTokensElement.textContent = data.session_tokens.toLocaleString();
-        if (avgTokensElement) avgTokensElement.textContent = data.avg_tokens.toLocaleString();
-        
-        // Update the progress bar
-        if (tokenUsageBarElement) {
-            tokenUsageBarElement.style.width = `${data.usage_percent}%`;
-            
-            // Change color based on usage
-            if (data.usage_percent < 50) {
-                tokenUsageBarElement.className = 'progress-bar bg-success';
-            } else if (data.usage_percent < 80) {
-                tokenUsageBarElement.className = 'progress-bar bg-warning';
-            } else {
-                tokenUsageBarElement.className = 'progress-bar bg-danger';
-            }
         }
-        
-        if (tokenUsagePercentElement) {
-            tokenUsagePercentElement.textContent = `${data.usage_percent}%`;
-        }
-    }
-    
-    // Initialize security dashboard if we're on the main dashboard page
-    if (document.getElementById('security-metrics')) {
-        initSecurityDashboard();
-        
-        // Add event listener for security refresh button
-        const refreshSecurityBtn = document.getElementById('refreshSecurity');
-        if (refreshSecurityBtn) {
-            refreshSecurityBtn.addEventListener('click', initSecurityDashboard);
-        }
-    }
-    
-    // Initialize token metrics if we're on the main dashboard page
-    if (document.getElementById('token-metrics')) {
-        initTokenUsageMetrics();
-        
-        // Add event listener for token refresh button
-        const refreshTokensBtn = document.getElementById('refreshTokens');
-        if (refreshTokensBtn) {
-            refreshTokensBtn.addEventListener('click', initTokenUsageMetrics);
-        }
-    }
-
-    function createToolCard(tool) {
-        const div = document.createElement('div');
-        div.className = 'list-group-item';
-        const statusClass = tool.available ? 'text-success' : 'text-secondary';
-        const statusIcon = tool.available ? 'bi-check-circle-fill' : 'bi-x-circle-fill';
-        const statusText = tool.available ? 'Available' : 'Unavailable';
-
-        div.innerHTML = `
-            <div class="d-flex justify-content-between align-items-start">
-                <div>
-                    <h6 class="mb-1"><i class="bi bi-gear"></i> ${tool.name || 'Unnamed Tool'}</h6>
-                    <p class="mb-0 text-muted small">${tool.description || 'No description'}</p>
-                    <small class="text-muted">API: ${tool.api_endpoint || 'N/A'}</small>
-                </div>
-                <span class="${statusClass} small" data-bs-toggle="tooltip" title="${statusText}">
-                    <i class="bi ${statusIcon}"></i>
-                </span>
-            </div>
-        `;
-
-        // Initialize tooltip
-        const tooltip = new bootstrap.Tooltip(div.querySelector('[data-bs-toggle="tooltip"]'));
-
-        return div;
-    }
-}); 
+    });
+});

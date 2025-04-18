@@ -1,7 +1,7 @@
 // API Configuration
 const API_CONFIG = {
-    BASE_URL: 'http://localhost:8000',  // Backend API URL
-    WS_URL: 'ws://localhost:8000',      // WebSocket URL
+    BASE_URL: 'http://127.0.0.1:8000',  // Backend API URL (IPv4)
+    WS_URL: 'ws://127.0.0.1:8000',      // WebSocket URL (IPv4)
     ENDPOINTS: {
         AGENTS: '/api/agents',
         TOOLS: '/api/tools',
@@ -11,7 +11,14 @@ const API_CONFIG = {
     },
     REFRESH_INTERVAL: 5000,  // Refresh interval in milliseconds
     MAX_RETRIES: 3,          // Maximum number of retries for failed requests
-    TIMEOUT: 5000            // Request timeout in milliseconds
+    TIMEOUT: 5000,           // Request timeout in milliseconds
+    DEFAULT_HEADERS: {       // Default headers for all requests
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+    }
 };
 
 // Theme Management

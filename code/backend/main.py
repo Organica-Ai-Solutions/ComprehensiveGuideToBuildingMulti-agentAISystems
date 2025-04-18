@@ -30,8 +30,10 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:8080"],  # Frontend origin
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"],
+    allow_headers=["Content-Type", "X-API-Key", "Accept"],
+    expose_headers=["*"],
+    max_age=3600,  # Cache preflight requests for 1 hour
 )
 
 # Load environment variables
@@ -382,54 +384,32 @@ async def websocket_endpoint(websocket: WebSocket, agent_id: str):
             await websocket.close()
         manager.disconnect(websocket, agent_id)
 
+@app.options("/api/agents/{agent_id}/messages")
+async def messages_options():
+    return {}  # Return empty dict for OPTIONS request
+
 @app.post("/api/agents/{agent_id}/messages", response_model=EnhancedResponse)
 async def create_message(agent_id: str, message: Message):
-    """Create a new message and get agent response"""
-    if agent_id not in agents:
-        raise HTTPException(status_code=404, detail="Agent not found")
-
-    # Create message ID
-    msg_id = str(len(messages) + 1)
-    message.id = msg_id
-    message.timestamp = datetime.now()
-    message.token_count = len(message.content.split())
-    message.status = 'success'
-    messages[msg_id] = message
-
-    # Generate response using the same function as WebSocket
-    agent = agents[agent_id]
-    response_content = generate_agent_response(agent, message.content)
-    
-    # Create response message
-    response_id = str(len(messages) + 1)
-    response_msg = Message(
-        id=response_id,
-        agent_id=agent_id,
-        content=response_content,
-        sender="agent",
-        timestamp=datetime.now(),
-        token_count=len(response_content.split()),
-        status='success'
-    )
-    messages[response_id] = response_msg
-
-    # Broadcast the message to any connected WebSocket clients
-    await manager.broadcast({
-        'type': 'message',
-        'content': response_content,
-        'timestamp': datetime.now().isoformat(),
-        'status': 'success',
-        'sender': 'agent',
-        'agent_name': agent.name
-    }, agent_id)
-
-    return EnhancedResponse(
-        content=response_content,
-        reasoning_steps=[
-            ReasoningStep(step_number=1, content=f"Analyzed user message about {message.content[:30]}..."),
-            ReasoningStep(step_number=2, content=f"Generated response based on {agent.role} expertise")
-        ]
-    )
+    try:
+        if agent_id not in agents:
+            raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
+        
+        # Validate message
+        if not message.content:
+            raise HTTPException(status_code=400, detail="Message content cannot be empty")
+        
+        # Process message
+        response = await process_message(agent_id, {
+            "type": "chat",
+            "content": message.content,
+            "sender": message.sender
+        })
+        
+        return response
+        
+    except Exception as e:
+        logger.error(f"Error processing message: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/metrics")
 async def get_metrics():
@@ -449,5 +429,17 @@ async def get_metrics():
         "memory_usage": psutil.virtual_memory().percent
     }
 
+@app.options("/api/tools")
+async def tools_options():
+    return {}  # Return empty dict for OPTIONS request
+
+@app.options("/api/agents")
+async def agents_options():
+    return {}  # Return empty dict for OPTIONS request
+
+@app.options("/api/metrics")
+async def metrics_options():
+    return {}  # Return empty dict for OPTIONS request
+
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000) 
+    uvicorn.run(app, host="localhost", port=8000) 
