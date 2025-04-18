@@ -1,85 +1,100 @@
-const AgentList = {
-    container: null,
-    agents: [],
+class AgentList {
+    constructor() {
+        this.container = document.getElementById('agentList');
+        this.refreshButton = document.getElementById('refreshAgents');
+        this.agents = [];
+        
+        this.init();
+    }
 
     init() {
-        this.container = document.getElementById('agentList');
-        this.refresh();
-    },
+        this.refreshButton.addEventListener('click', () => this.refreshAgents());
+        this.refreshAgents();
+        
+        // Auto-refresh every 30 seconds
+        setInterval(() => this.refreshAgents(), 30000);
+    }
 
-    async refresh() {
+    async refreshAgents() {
         try {
-            this.showLoading();
             const response = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.AGENTS}`);
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            this.agents = await response.json();
+            const agents = await response.json();
+            this.agents = agents;
             this.render();
-        } catch (err) {
-            this.showError(err instanceof Error ? err.message : 'An error occurred');
+        } catch (error) {
+            console.error('Error fetching agents:', error);
+            this.showError();
         }
-    },
-
-    showLoading() {
-        this.container.innerHTML = `
-            <div class="text-center">
-                <div class="spinner-border text-primary" role="status">
-                    <span class="visually-hidden">Loading...</span>
-                </div>
-            </div>
-        `;
-    },
-
-    showError(message) {
-        this.container.innerHTML = `
-            <div class="alert alert-danger" role="alert">
-                ${message}
-            </div>
-        `;
-    },
-
-    getStatusColor(status) {
-        switch (status) {
-            case 'idle': return 'success';
-            case 'working': return 'primary';
-            case 'error': return 'danger';
-            default: return 'secondary';
-        }
-    },
+    }
 
     render() {
-        if (!this.agents.length) {
-            this.container.innerHTML = '<div class="text-center text-muted">No agents found</div>';
-            return;
-        }
-
+        if (!this.container) return;
+        
         this.container.innerHTML = this.agents.map(agent => `
-            <div class="list-group-item list-group-item-action">
-                <div class="d-flex w-100 justify-content-between">
-                    <h5 class="mb-1">${agent.name}</h5>
-                    <small class="text-${this.getStatusColor(agent.status)}">
-                        ${agent.status}
-                    </small>
-                </div>
-                <p class="mb-1">
-                    <strong>Role:</strong> ${agent.role}
-                </p>
-                <p class="mb-1">
-                    <strong>Goal:</strong> ${agent.goal}
-                </p>
-                <div class="mb-1">
-                    <strong>Capabilities:</strong>
-                    <div class="d-flex flex-wrap gap-1 mt-1">
-                        ${agent.capabilities.map(capability => `
-                            <span class="badge bg-info">${capability}</span>
-                        `).join('')}
+            <div class="list-group-item">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="mb-0">${agent.name}</h6>
+                        <small class="text-muted">${agent.role || 'No role specified'}</small>
+                    </div>
+                    <div class="d-flex align-items-center">
+                        <span class="status-badge ${agent.status.toLowerCase()}">${agent.status}</span>
+                        <button class="btn btn-sm btn-link ms-2" onclick="agentList.viewDetails('${agent.id}')">
+                            <i class="bi bi-info-circle"></i>
+                        </button>
                     </div>
                 </div>
-                <small class="text-muted">
-                    Created: ${new Date(agent.created_at).toLocaleString()}
-                </small>
+                ${this.renderMetrics(agent)}
             </div>
         `).join('');
     }
-}; 
+
+    renderMetrics(agent) {
+        if (!agent.metrics) return '';
+        
+        return `
+            <div class="agent-metrics mt-2">
+                <div class="row g-2">
+                    <div class="col-6">
+                        <small class="d-block text-muted">Success Rate</small>
+                        <div class="progress" style="height: 5px;">
+                            <div class="progress-bar bg-success" 
+                                 style="width: ${agent.metrics.successRate}%" 
+                                 role="progressbar"></div>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <small class="d-block text-muted">Load</small>
+                        <div class="progress" style="height: 5px;">
+                            <div class="progress-bar bg-primary" 
+                                 style="width: ${agent.metrics.load}%" 
+                                 role="progressbar"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    showError() {
+        if (!this.container) return;
+        
+        this.container.innerHTML = `
+            <div class="list-group-item text-danger">
+                <i class="bi bi-exclamation-triangle me-2"></i>
+                Error loading agents. Please try again.
+            </div>
+        `;
+    }
+
+    viewDetails(agentId) {
+        const agent = this.agents.find(a => a.id === agentId);
+        if (!agent) return;
+        
+        // You can implement a modal or redirect to agent details page
+        console.log('View details for agent:', agent);
+    }
+}
+
+// Initialize the agent list
+const agentList = new AgentList(); 

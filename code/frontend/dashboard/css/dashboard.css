@@ -1,0 +1,179 @@
+/* Dashboard Layout */
+.dashboard-body {
+    background-color: var(--bs-body-bg);
+    min-height: 100vh;
+    padding-top: 4rem;
+}
+
+.dashboard-layout {
+    padding: 2rem;
+}
+
+.dashboard-main {
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+/* Overview Section */
+.overview-section {
+    margin-bottom: 2rem;
+}
+
+.stat-card {
+    background: var(--bs-body-bg);
+    border: 1px solid var(--bs-border-color);
+    border-radius: 1rem;
+    padding: 1.5rem;
+    height: 100%;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.stat-icon {
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+    margin-bottom: 1rem;
+    background: var(--bs-primary-bg-subtle);
+}
+
+.stat-icon i {
+    font-size: 24px;
+    color: var(--bs-primary);
+}
+
+.stat-content h3 {
+    font-size: 2rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    color: var(--bs-heading-color);
+}
+
+.stat-content p {
+    color: var(--bs-secondary-color);
+    margin-bottom: 0;
+}
+
+/* Charts Section */
+.charts-section {
+    margin-bottom: 2rem;
+}
+
+.chart-card {
+    background: var(--bs-body-bg);
+    border: 1px solid var(--bs-border-color);
+    border-radius: 1rem;
+    height: 100%;
+    overflow: hidden;
+}
+
+.chart-header {
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid var(--bs-border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.chart-header h5 {
+    margin-bottom: 0;
+    font-weight: 600;
+}
+
+.chart-body {
+    padding: 1.5rem;
+    height: 300px;
+    position: relative;
+}
+
+/* Tasks Section */
+.tasks-section {
+    margin-bottom: 2rem;
+}
+
+.tasks-section .card {
+    border-radius: 1rem;
+    overflow: hidden;
+}
+
+.tasks-section .card-header {
+    background: transparent;
+    padding: 1rem 1.5rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.tasks-section .actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.table {
+    margin-bottom: 0;
+}
+
+.table th {
+    font-weight: 600;
+    color: var(--bs-secondary-color);
+    border-bottom-width: 1px;
+}
+
+.table td {
+    vertical-align: middle;
+}
+
+/* Status Badges */
+.badge {
+    padding: 0.5em 1em;
+    font-weight: 500;
+    text-transform: capitalize;
+}
+
+.badge-success {
+    background-color: var(--bs-success-bg-subtle);
+    color: var(--bs-success);
+}
+
+.badge-warning {
+    background-color: var(--bs-warning-bg-subtle);
+    color: var(--bs-warning);
+}
+
+.badge-danger {
+    background-color: var(--bs-danger-bg-subtle);
+    color: var(--bs-danger);
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+    .dashboard-layout {
+        padding: 1rem;
+    }
+    
+    .stat-card {
+        padding: 1rem;
+    }
+    
+    .chart-body {
+        height: 250px;
+    }
+}
+
+/* Dark Mode Adjustments */
+[data-bs-theme="dark"] .stat-card,
+[data-bs-theme="dark"] .chart-card {
+    background: var(--bs-dark-bg-subtle);
+    border-color: var(--bs-border-color-translucent);
+}
+
+[data-bs-theme="dark"] .table {
+    --bs-table-hover-bg: var(--bs-dark-bg-subtle);
+} 

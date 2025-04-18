@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="light">
+<head>
+    <title>Multi-Agent Chat System</title>
+    <!-- Load shared header synchronously -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Roboto+Mono&display=swap" rel="stylesheet">
+    <link href="/css/styles.css" rel="stylesheet">
+    <link href="css/chat.css" rel="stylesheet">
+    
+    <!-- Shared Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/js/config.js"></script>
+    <script src="/js/base.js"></script>
+    <script src="/components/shared/Navigation.js"></script>
+    <script src="js/chat.js"></script>
+</head>
+<body class="chat-body">
+    <!-- Navigation will be inserted by Navigation.js -->
+
+    <!-- Chat Layout -->
+    <div class="chat-layout">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <h5 class="mb-0">Chat History</h5>
+                <button class="btn btn-icon" id="toggleSidebar">
+                    <i class="bi bi-layout-sidebar"></i>
+                </button>
+            </div>
+            <div class="chat-history">
+                <!-- Chat history items will be dynamically added here -->
+            </div>
+        </aside>
+
+        <!-- Main Chat Area -->
+        <main class="chat-main">
+            <div class="messages-container" id="messagesContainer">
+                <!-- Welcome message -->
+                <div class="message agent-message">
+                    <div class="message-header">
+                        <div class="message-avatar">
+                            <i class="bi bi-robot"></i>
+                        </div>
+                        <strong>AI Assistant</strong>
+                    </div>
+                    <div class="message-content">
+                        <p>👋 Hello! I'm your AI assistant. I can help you with:</p>
+                        <ul>
+                            <li>Writing and reviewing code</li>
+                            <li>Explaining complex concepts</li>
+                            <li>Solving technical problems</li>
+                            <li>Answering questions about development</li>
+                        </ul>
+                        <p>How can I assist you today?</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="chat-input-container">
+                <div class="file-preview" id="filePreview" style="display: none;">
+                    <!-- File previews will be added here -->
+                </div>
+                <div class="input-group">
+                    <button class="btn btn-icon" id="uploadFile" title="Attach file">
+                        <i class="bi bi-paperclip"></i>
+                    </button>
+                    <textarea class="form-control" id="messageInput" rows="1" 
+                              placeholder="Type your message..." 
+                              aria-label="Message input"></textarea>
+                    <button class="btn btn-primary" id="sendMessage" title="Send message">
+                        <i class="bi bi-send"></i>
+                    </button>
+                </div>
+            </div>
+        </main>
+
+        <!-- Context Panel -->
+        <aside class="context-panel" id="contextPanel">
+            <div class="context-header">
+                <h5 class="mb-0">Context & Information</h5>
+            </div>
+            <div class="context-content">
+                <!-- Reasoning Steps Section -->
+                <div class="context-section">
+                    <div class="section-header">
+                        <h6 class="mb-0">Reasoning Steps</h6>
+                    </div>
+                    <div id="thoughtTree">
+                        <!-- Reasoning steps will be added here -->
+                    </div>
+                </div>
+
+                <!-- Tool Usage Section -->
+                <div class="context-section">
+                    <div class="section-header">
+                        <h6 class="mb-0">Tool Usage</h6>
+                    </div>
+                    <div id="toolUsage">
+                        <!-- Tool usage will be added here -->
+                    </div>
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <!-- Message Templates -->
+    <template id="userMessageTemplate">
+        <div class="message user-message">
+            <div class="message-content">
+                <!-- Message content will be inserted here -->
+            </div>
+        </div>
+    </template>
+
+    <template id="agentMessageTemplate">
+        <div class="message agent-message">
+            <div class="message-header">
+                <div class="message-avatar">
+                    <i class="bi bi-robot"></i>
+                </div>
+                <strong>AI Assistant</strong>
+            </div>
+            <div class="message-content">
+                <!-- Message content will be inserted here -->
+            </div>
+        </div>
+    </template>
+
+    <template id="filePreviewTemplate">
+        <div class="file-preview-item">
+            <i class="bi bi-file-earmark-text"></i>
+            <span class="filename"><!-- Filename will be inserted here --></span>
+            <button class="btn btn-icon btn-sm remove-file">
+                <i class="bi bi-x"></i>
+            </button>
+        </div>
+    </template>
+</body>
+</html> 

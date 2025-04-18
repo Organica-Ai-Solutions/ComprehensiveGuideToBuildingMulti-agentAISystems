@@ -7,7 +7,7 @@ const hostname = '127.0.0.1';  // Force IPv4 localhost
 const port = '8000'; // Backend server port
 
 // API Configuration
-export const API_CONFIG = {
+const API_CONFIG = {
     BASE_URL: `${protocol}://${hostname}:${port}`,
     WS_URL: `${wsProtocol}://${hostname}:${port}`,
     ENDPOINTS: {
@@ -21,7 +21,7 @@ export const API_CONFIG = {
 };
 
 // Default fetch options
-export const defaultFetchOptions = {
+const defaultFetchOptions = {
     mode: 'cors',
     cache: 'no-cache',
     headers: {
@@ -31,20 +31,24 @@ export const defaultFetchOptions = {
     credentials: 'include'
 };
 
+// Make configurations and utilities globally available
+window.API_CONFIG = API_CONFIG;
+window.defaultFetchOptions = defaultFetchOptions;
+
 // Generic API call function with retry logic
-export async function apiCall(endpoint, options = {}) {
+async function apiCall(endpoint, options = {}) {
     const maxRetries = 3;
     const baseDelay = 1000; // 1 second
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
-            const response = await fetch(`${API_CONFIG.BASE_URL}${endpoint}`, {
+            const response = await fetch(`${window.API_CONFIG.BASE_URL}${endpoint}`, {
                 ...defaultFetchOptions,
                 ...options
             });
 
             if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status} ${response.statusText}`);
+                throw new Error(`HTTP error! status: ${response.status}`);
             }
 
             return await response.json();
@@ -64,15 +68,15 @@ export async function apiCall(endpoint, options = {}) {
 }
 
 // Utility functions
-export function generateId() {
+function generateId() {
     return `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 }
 
-export function formatTimestamp(timestamp) {
+function formatTimestamp(timestamp) {
     return new Date(timestamp).toLocaleString();
 }
 
-export function sanitizeInput(input) {
+function sanitizeInput(input) {
     return input
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
@@ -81,7 +85,7 @@ export function sanitizeInput(input) {
 }
 
 // Error handling
-export class APIError extends Error {
+class APIError extends Error {
     constructor(message, status, endpoint) {
         super(message);
         this.name = 'APIError';
@@ -91,7 +95,7 @@ export class APIError extends Error {
 }
 
 // Event handling
-export const EventTypes = {
+const EventTypes = {
     CONNECTION_STATUS: 'connection_status',
     MESSAGE_RECEIVED: 'message_received',
     ERROR_OCCURRED: 'error_occurred',
@@ -100,7 +104,7 @@ export const EventTypes = {
 };
 
 // Event bus for communication
-export const EventBus = {
+const EventBus = {
     listeners: new Map(),
 
     on(event, callback) {
@@ -129,41 +133,114 @@ export const EventBus = {
     }
 };
 
-// Theme Management
-function initializeTheme() {
+// Theme configuration
+const THEME_CONFIG = {
+    STORAGE_KEY: 'theme',
+    DEFAULT: 'light'
+};
+
+// Utility functions for date formatting
+function formatDate(dateString) {
+    const date = new Date(dateString);
+    return date.toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+}
+
+// Utility function for number formatting
+function formatNumber(number) {
+    return new Intl.NumberFormat('en-US', {
+        notation: 'compact',
+        maximumFractionDigits: 1
+    }).format(number);
+}
+
+// Utility function for making API requests
+async function makeApiRequest(endpoint, options = {}) {
+    try {
+        const response = await fetch(`${API_CONFIG.BASE_URL}${endpoint}`, {
+            ...options,
+            headers: {
+                'Content-Type': 'application/json',
+                ...options.headers
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        return data;
+    } catch (error) {
+        console.error('API request failed:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+// Utility function for showing alerts
+function showAlert(message, type = 'danger') {
+    const alertContainer = document.getElementById('alert-container');
+    if (!alertContainer) return;
+
+    const alert = document.createElement('div');
+    alert.className = `alert alert-${type} alert-dismissible fade show`;
+    alert.role = 'alert';
+    alert.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    `;
+
+    alertContainer.appendChild(alert);
+
+    // Auto-dismiss after 5 seconds
+    setTimeout(() => {
+        alert.classList.remove('show');
+        setTimeout(() => alert.remove(), 150);
+    }, 5000);
+}
+
+// Utility function for handling API errors
+function handleApiError(error, context = '') {
+    console.error(`${context} Error:`, error);
+    showAlert(`Failed to ${context.toLowerCase()}: ${error.message}`);
+}
+
+// Theme management
+const ThemeManager = {
+    init() {
+        const savedTheme = localStorage.getItem(THEME_CONFIG.STORAGE_KEY) || THEME_CONFIG.DEFAULT;
+        this.setTheme(savedTheme);
+    },
+
+    setTheme(theme) {
+        document.documentElement.setAttribute('data-bs-theme', theme);
+        localStorage.setItem(THEME_CONFIG.STORAGE_KEY, theme);
+    },
+
+    toggleTheme() {
+        const currentTheme = document.documentElement.getAttribute('data-bs-theme');
+        const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+        this.setTheme(newTheme);
+        return newTheme;
+    }
+};
+
+// Initialize theme based on stored preference
+document.addEventListener('DOMContentLoaded', () => {
     const theme = localStorage.getItem('theme') || 'light';
     document.documentElement.setAttribute('data-bs-theme', theme);
-    updateThemeToggle(theme);
-}
+});
 
-function updateThemeToggle(theme) {
-    const toggler = document.getElementById('theme-toggler');
-    const label = document.getElementById('theme-label');
-    if (toggler && label) {
-        const icon = toggler.querySelector('i');
-        if (theme === 'dark') {
-            icon.className = 'bi bi-sun-fill';
-            label.textContent = 'Light';
-        } else {
-            icon.className = 'bi bi-moon-stars-fill';
-            label.textContent = 'Dark';
-        }
-    }
-}
-
-// Initialize theme on load
-document.addEventListener('DOMContentLoaded', () => {
-    initializeTheme();
-    
-    // Theme toggle handler
-    const themeToggler = document.getElementById('theme-toggler');
-    if (themeToggler) {
-        themeToggler.addEventListener('click', () => {
-            const currentTheme = document.documentElement.getAttribute('data-bs-theme');
-            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-            document.documentElement.setAttribute('data-bs-theme', newTheme);
-            localStorage.setItem('theme', newTheme);
-            updateThemeToggle(newTheme);
-        });
-    }
-}); 
+// Make everything available globally
+window.APIError = APIError;
+window.EventTypes = EventTypes;
+window.EventBus = EventBus;
+window.defaultFetchOptions = defaultFetchOptions;
+window.apiCall = apiCall;
+window.generateId = generateId;
+window.formatTimestamp = formatTimestamp;
+window.sanitizeInput = sanitizeInput; 

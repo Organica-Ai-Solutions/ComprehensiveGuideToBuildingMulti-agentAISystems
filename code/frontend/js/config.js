@@ -1,19 +1,50 @@
 // System Configuration
 
-// Define the base URL for API calls
-export const API_CONFIG = {
-    baseUrl: 'http://127.0.0.1:8000',
-    wsUrl: 'ws://127.0.0.1:8000',
+// API Configuration
+window.API_CONFIG = {
+    BASE_URL: 'http://localhost:8000/api',
     ENDPOINTS: {
-        AGENTS: '/api/agents',
-        MESSAGES: '/api/messages',
-        TOOLS: '/api/tools',
-        HEALTH: '/api/health'
+        METRICS: '/metrics',
+        TASKS: '/tasks',
+        AGENTS: '/agents',
+        TOOLS: '/tools',
+        SECURITY: '/security',
+        TOKENS: '/tokens'
+    },
+    REFRESH_INTERVALS: {
+        METRICS: 60000,  // 1 minute
+        TASKS: 30000,    // 30 seconds
+        SECURITY: 45000, // 45 seconds
+        TOKENS: 60000    // 1 minute
     }
 };
 
+// WebSocket Configuration
+const WS_CONFIG = {
+    BASE_URL: 'ws://localhost:8000',
+    ENDPOINTS: {
+        AGENT_CHAT: '/ws'
+    }
+};
+
+// Theme Configuration
+const THEME_CONFIG = {
+    STORAGE_KEY: 'preferred_theme',
+    DEFAULT: 'light'
+};
+
+// Agent Configuration
+const AGENT_CONFIG = {
+    TYPES: {
+        RESEARCHER: 'researcher',
+        CODER: 'coder',
+        ASSISTANT: 'assistant'
+    },
+    DEFAULT: 'assistant'
+};
+
 // Agent configurations
-export const AGENTS = {
+const AGENTS = {
     RESEARCH: {
         id: "1",
         name: "Research Assistant",
@@ -41,7 +72,7 @@ export const AGENTS = {
 };
 
 // Tool configurations
-export const TOOLS = {
+const TOOLS = {
     WEB_SEARCH: {
         id: "1",
         name: "Web Search",
@@ -78,7 +109,7 @@ export const TOOLS = {
 };
 
 // Model configurations
-export const MODELS = [
+window.MODELS = [
     { 
         id: 'gpt-4',
         name: 'GPT-4',
@@ -110,7 +141,7 @@ export const MODELS = [
 ];
 
 // Guardrail configurations
-export const GUARDRAILS = {
+const GUARDRAILS = {
     // Prompt injection patterns to detect
     PROMPT_INJECTION_PATTERNS: [
         /ignore previous instructions/i,
@@ -137,5 +168,72 @@ export const GUARDRAILS = {
     RESPONSE_VALIDATION: {
         MAX_LENGTH: 8000,   // Maximum allowed response length
         MIN_LENGTH: 5       // Minimum allowed response length
+    }
+};
+
+// Chart Configuration
+window.CHART_CONFIG = {
+    COLORS: {
+        PRIMARY: '#007bff',
+        SUCCESS: '#28a745',
+        WARNING: '#ffc107',
+        DANGER: '#dc3545',
+        INFO: '#17a2b8',
+        SECONDARY: '#6c757d'
+    },
+    BACKGROUND_OPACITY: 0.2,
+    DEFAULT_OPTIONS: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                position: 'bottom'
+            }
+        }
+    }
+};
+
+// Theme Configuration
+window.THEME_COLORS = {
+    light: {
+        background: '#ffffff',
+        text: '#212529',
+        border: '#dee2e6',
+        chart: {
+            gridLines: '#e9ecef',
+            text: '#495057'
+        }
+    },
+    dark: {
+        background: '#212529',
+        text: '#f8f9fa',
+        border: '#495057',
+        chart: {
+            gridLines: '#343a40',
+            text: '#adb5bd'
+        }
+    }
+};
+
+// UI Configuration
+window.UI_CONFIG = {
+    ANIMATION_DURATION: 150,
+    TOAST_DURATION: 5000,
+    MAX_ITEMS_PER_PAGE: 10,
+    DATE_FORMAT: {
+        short: {
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        },
+        long: {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+        }
     }
 }; 
