@@ -405,6 +405,163 @@ When moving your agent system to production, consider these proven patterns:
 6. **Data Privacy**: Consider data residency requirements and implement appropriate encryption and access controls for sensitive information
 7. **Cost Monitoring**: Set up alerting for unusual usage patterns that could lead to unexpected costs
 
+## Testing Multi-Agent Systems
+
+Testing multi-agent AI systems requires a comprehensive approach that covers various aspects of the system's functionality, safety, and performance. This section outlines the key testing strategies and best practices implemented in our system.
+
+### Core Testing Components
+
+1. **Agent Processor Testing**
+   - Validation of research and code processing capabilities
+   - Testing of API integrations and error handling
+   - Verification of agent response quality and safety
+   ```javascript
+   describe('ResearchProcessor', () => {
+       it('should process research queries successfully', async () => {
+           const message = 'Tell me about quantum computing';
+           const result = await processor.process(message);
+           expect(result.confidence).toBeGreaterThan(0.8);
+           expect(result.sources).toBeDefined();
+       });
+   });
+   ```
+
+2. **Safety Guardrails Testing**
+   - Code safety validation
+   - Tool usage permission checks
+   - Resource limit monitoring
+   ```javascript
+   describe('Safety Guardrails', () => {
+       it('should detect dangerous system commands', async () => {
+           const code = 'exec.execSync("rm -rf /")';
+           const result = await guardrails.checkCodeSafety(code);
+           expect(result.safe).toBe(false);
+           expect(result.issues[0].severity).toBe('critical');
+       });
+   });
+   ```
+
+3. **Agent Orchestration Testing**
+   - Message processing and routing
+   - Tool request handling
+   - Agent handoff management
+   ```javascript
+   describe('AgentOrchestrator', () => {
+       it('should handle agent handoffs correctly', async () => {
+           const result = await orchestrator.handleAgentHandoff(
+               fromAgent, toAgent, message
+           );
+           expect(result.success).toBe(true);
+           expect(result.handoffId).toBeDefined();
+       });
+   });
+   ```
+
+### Testing Best Practices
+
+1. **Test Organization**
+   - Group tests by functionality
+   - Use descriptive test names
+   - Maintain test isolation
+   - Clean up test resources after each test
+
+2. **Mocking and Stubbing**
+   - Mock external API calls
+   - Stub complex dependencies
+   - Simulate various response scenarios
+   ```javascript
+   beforeEach(() => {
+       jest.spyOn(apiClient, 'call').mockResolvedValue({
+           status: 'success',
+           data: mockResponse
+       });
+   });
+   ```
+
+3. **Error Handling Tests**
+   - Test edge cases
+   - Verify error messages
+   - Check recovery mechanisms
+   ```javascript
+   it('should handle API failures gracefully', async () => {
+       apiClient.call.mockRejectedValue(new Error('API Error'));
+       const result = await processor.process(message);
+       expect(result.error).toBeDefined();
+       expect(result.fallbackUsed).toBe(true);
+   });
+   ```
+
+### Continuous Integration
+
+1. **Automated Testing Pipeline**
+   - Run tests on every pull request
+   - Maintain high test coverage
+   - Regular test suite maintenance
+
+2. **Performance Testing**
+   - Monitor response times
+   - Check resource usage
+   - Validate scalability
+   ```javascript
+   it('should complete within time limit', async () => {
+       const startTime = Date.now();
+       await processor.process(message);
+       const duration = Date.now() - startTime;
+       expect(duration).toBeLessThan(maxProcessingTime);
+   });
+   ```
+
+3. **Integration Testing**
+   - Test full system workflows
+   - Verify cross-component interactions
+   - Validate end-to-end functionality
+
+### Testing Tools and Frameworks
+
+1. **Jest for Frontend Testing**
+   - Component testing
+   - API mocking
+   - Code coverage reporting
+
+2. **Pytest for Backend Testing**
+   - Async testing support
+   - Fixture management
+   - Parametrized testing
+
+3. **Custom Testing Utilities**
+   - Mock data generators
+   - Test helpers
+   - Assertion utilities
+
+### Monitoring and Metrics
+
+1. **Test Metrics Collection**
+   - Test execution time
+   - Coverage statistics
+   - Failure rates
+
+2. **Performance Benchmarks**
+   - Response time tracking
+   - Resource usage monitoring
+   - Scalability testing
+
+### Future Testing Considerations
+
+1. **AI-Specific Testing**
+   - Model behavior validation
+   - Prompt testing
+   - Output quality assessment
+
+2. **Security Testing**
+   - Penetration testing
+   - Vulnerability scanning
+   - Security compliance checks
+
+3. **Scalability Testing**
+   - Load testing
+   - Stress testing
+   - Performance optimization
+
 ## Summary
 
 Deploying multi-agent AI systems effectively requires bridging the gap between sophisticated agent logic and robust, scalable cloud infrastructure. Serverless architectures provide an excellent foundation for most agent deployments due to their scalability, cost efficiency, and reduced operational overhead.

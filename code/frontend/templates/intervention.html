@@ -1,0 +1,78 @@
+<!-- Human Intervention Panel -->
+<div id="intervention-panel">
+    <div class="intervention-container">
+        <div class="intervention-header">
+            <h3 id="intervention-title">Human Intervention Required</h3>
+            <span id="intervention-priority" class="priority-badge"></span>
+        </div>
+
+        <div class="intervention-content">
+            <div id="intervention-description"></div>
+
+            <!-- Safety Review Section -->
+            <div id="safety-review-section" style="display: none;">
+                <h4>Safety Concerns</h4>
+                <div class="safety-issues" id="safety-issues-list"></div>
+            </div>
+
+            <!-- Tool Usage Section -->
+            <div id="tool-usage-section" style="display: none;">
+                <h4>Tool Request Details</h4>
+                <div class="tool-details" id="tool-details">
+                    <p><strong>Tool:</strong> <span id="tool-name"></span></p>
+                    <p><strong>Parameters:</strong></p>
+                    <pre id="tool-params"></pre>
+                    <p><strong>Purpose:</strong> <span id="tool-purpose"></span></p>
+                </div>
+            </div>
+
+            <!-- Feedback Section -->
+            <div id="feedback-section" style="display: none;">
+                <h4>Provide Feedback</h4>
+                <div class="feedback-form">
+                    <div class="feedback-category">
+                        <label for="accuracy-rating">Accuracy:</label>
+                        <select id="accuracy-rating">
+                            <option value="1">Poor</option>
+                            <option value="2">Fair</option>
+                            <option value="3">Good</option>
+                            <option value="4">Very Good</option>
+                            <option value="5">Excellent</option>
+                        </select>
+                    </div>
+                    <div class="feedback-category">
+                        <label for="safety-rating">Safety:</label>
+                        <select id="safety-rating">
+                            <option value="1">Unsafe</option>
+                            <option value="2">Questionable</option>
+                            <option value="3">Acceptable</option>
+                            <option value="4">Safe</option>
+                            <option value="5">Very Safe</option>
+                        </select>
+                    </div>
+                    <div class="feedback-notes">
+                        <label for="feedback-notes">Additional Notes:</label>
+                        <textarea id="feedback-notes" rows="3" placeholder="Enter any additional feedback..."></textarea>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="intervention-actions" id="intervention-actions">
+            <!-- Action buttons will be dynamically added here based on intervention type -->
+        </div>
+    </div>
+</div>
+
+<!-- Templates for dynamic content -->
+<template id="safety-issue-template">
+    <div class="safety-issue">
+        <h5 class="issue-title"></h5>
+        <p class="issue-description"></p>
+        <div class="issue-recommendation"></div>
+    </div>
+</template>
+
+<template id="action-button-template">
+    <button class="btn"></button>
+</template> 

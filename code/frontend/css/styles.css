@@ -1186,3 +1186,89 @@
 }
 
 /* Dark theme adjustments */
+.container {
+    display: flex;
+    height: 100vh;
+    padding: 20px;
+    gap: 20px;
+}
+
+.chat-container {
+    flex: 2;
+    display: flex;
+    flex-direction: column;
+    background: #ffffff;
+    border-radius: 10px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    padding: 20px;
+}
+
+.context-panel {
+    flex: 1;
+    background: #ffffff;
+    border-radius: 10px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    padding: 20px;
+    overflow-y: auto;
+}
+
+.panel-section {
+    margin-bottom: 20px;
+}
+
+.panel-section h3 {
+    color: #333;
+    margin-bottom: 10px;
+    font-size: 1.1em;
+}
+
+.context-chain {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.context-node {
+    background: #f5f7fa;
+    padding: 10px;
+    border-radius: 6px;
+    font-size: 0.9em;
+}
+
+.reasoning-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.reasoning-step {
+    background: #f0f4f8;
+    padding: 10px;
+    border-radius: 6px;
+    font-size: 0.9em;
+}
+
+.token-metrics {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+}
+
+.metric-item {
+    background: #eef2f7;
+    padding: 10px;
+    border-radius: 6px;
+    text-align: center;
+}
+
+.metric-label {
+    font-size: 0.8em;
+    color: #666;
+}
+
+.metric-value {
+    font-size: 1.1em;
+    font-weight: bold;
+    color: #333;
+    margin-top: 5px;
+}

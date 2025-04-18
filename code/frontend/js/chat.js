@@ -1,4 +1,13 @@
 // Agent Chat Page JavaScript
+// Import manager agent functionality
+import { 
+    routeToAgent, 
+    validateToolUse, 
+    handoffToAgent, 
+    checkMessageSafety,
+    validateResponse 
+} from './agents/manager.js';
+
 document.addEventListener('DOMContentLoaded', async () => {
     console.log("Agent Chat page loaded");
     
@@ -28,7 +37,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             'Accept': 'application/json',
             'Content-Type': 'application/json'
         },
-        credentials: 'same-origin'
+        credentials: 'include'
     };
     
     console.log("API Configuration:", API_CONFIG);
@@ -161,111 +170,89 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     // --- UI Layout Management ---
     function toggleSidebar() {
+        const sidebar = document.getElementById('sidebar');
+        const chatLayout = document.querySelector('.chat-layout');
+        
+        if (!sidebar || !chatLayout) return;
+        
         sidebar.classList.toggle('collapsed');
         
         if (sidebar.classList.contains('collapsed')) {
-            // Sidebar is now collapsed
             chatLayout.classList.remove('show-sidebar');
-            
-            if (!contextPanel.classList.contains('collapsed')) {
-                // Context panel is expanded
-                chatLayout.classList.add('show-context');
-            }
         } else {
-            // Sidebar is now expanded
             chatLayout.classList.add('show-sidebar');
-            
-            if (!contextPanel.classList.contains('collapsed')) {
-                // Both panels are expanded
-                chatLayout.classList.add('show-both');
-            }
         }
-        
-        // Force redraw to ensure layout updates
-        setTimeout(() => {
-            window.dispatchEvent(new Event('resize'));
-        }, 300);
     }
     
     function toggleContextPanel() {
+        // Get required elements
         const contextPanel = document.getElementById('context-panel');
         const chatLayout = document.querySelector('.chat-layout');
         const contextToggleBtn = document.getElementById('context-toggle-btn');
         
-        if (!contextPanel) return;
-        
-        // Add animation class
-        contextPanel.classList.add('animating');
-        
-        // Toggle collapsed state
-        contextPanel.classList.toggle('collapsed');
-        
-        if (contextPanel.classList.contains('collapsed')) {
-            // Context panel is now collapsed
-            chatLayout.classList.remove('show-context');
-            
-            // Update toggle button icon
-            if (contextToggleBtn) {
-                contextToggleBtn.innerHTML = '<i class="bi bi-layout-sidebar-reverse"></i>';
-                contextToggleBtn.title = "Show Context Panel";
-            }
-            
-            if (!document.getElementById('sidebar').classList.contains('collapsed')) {
-                // Sidebar is expanded
-                chatLayout.classList.add('show-sidebar');
-            }
-        } else {
-            // Context panel is now expanded
-            chatLayout.classList.add('show-context');
-            
-            // Reset minimized state when showing
-            contextPanel.classList.remove('minimized');
-            
-            // Update button icon if needed
-            const contextMinimizeBtn = document.getElementById('context-minimize');
-            if (contextMinimizeBtn) {
-                contextMinimizeBtn.innerHTML = '<i class="bi bi-arrows-angle-contract"></i>';
-                contextMinimizeBtn.title = 'Minimize panel';
-            }
-            
-            // Update toggle button icon
-            if (contextToggleBtn) {
-                contextToggleBtn.innerHTML = '<i class="bi bi-layout-sidebar-inset-reverse"></i>';
-                contextToggleBtn.title = "Hide Context Panel";
-            }
-            
-            if (!document.getElementById('sidebar').classList.contains('collapsed')) {
-                // Both panels are expanded
-                chatLayout.classList.add('show-both');
-            }
+        if (!contextPanel || !chatLayout || !contextToggleBtn) {
+            console.error('Missing required elements for context panel toggle');
+            return;
         }
         
-        // Remove animation class after transition
-        setTimeout(() => {
-            contextPanel.classList.remove('animating');
-        }, 300);
+        // Simple direct toggle implementation
+        if (contextPanel.classList.contains('collapsed')) {
+            // Open the panel
+            contextPanel.classList.remove('collapsed');
+            chatLayout.classList.add('show-context');
+            contextToggleBtn.innerHTML = '<i class="bi bi-layout-sidebar-inset-reverse"></i>';
+        } else {
+            // Close the panel
+            contextPanel.classList.add('collapsed');
+            chatLayout.classList.remove('show-context');
+            contextToggleBtn.innerHTML = '<i class="bi bi-layout-sidebar-reverse"></i>';
+        }
+    }
+    
+    // Initialize event listeners
+    document.addEventListener('DOMContentLoaded', () => {
+        // Set up sidebar toggle
+        const sidebarToggle = document.getElementById('sidebar-toggle');
+        const sidebarClose = document.getElementById('sidebar-close');
         
-        // Force redraw to ensure layout updates
-        setTimeout(() => {
-            window.dispatchEvent(new Event('resize'));
-        }, 300);
-    }
-    
-    // Initialize layout - ensure at least one panel is visible by default
-    if (sidebar && sidebar.classList.contains('collapsed') && 
-        contextPanel && contextPanel.classList.contains('collapsed')) {
-        // Both panels are collapsed, show sidebar
-        toggleSidebar();
-    }
-    
-    // Initialize layout
-    sidebarToggle.addEventListener('click', toggleSidebar);
-    sidebarClose?.addEventListener('click', toggleSidebar);
-    document.getElementById('context-close')?.addEventListener('click', toggleContextPanel);
-    contextToggleBtn?.addEventListener('click', toggleContextPanel);
-    
-    // Initialize the enhanced context panel
-    initializeContextPanel();
+        if (sidebarToggle) {
+            sidebarToggle.addEventListener('click', toggleSidebar);
+        }
+        
+        if (sidebarClose) {
+            sidebarClose.addEventListener('click', toggleSidebar);
+        }
+        
+        // Set up context panel toggle button
+        const contextToggleBtn = document.getElementById('context-toggle-btn');
+        if (contextToggleBtn) {
+            contextToggleBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                toggleContextPanel();
+            });
+        }
+        
+        // Set up context panel close button
+        const contextClose = document.getElementById('context-close');
+        if (contextClose) {
+            contextClose.addEventListener('click', function(e) {
+                e.preventDefault();
+                toggleContextPanel();
+            });
+        }
+        
+        // Call updateToolUsage to add direct handlers
+        const toolUsageItems = document.querySelectorAll('.tool-usage-item');
+        toolUsageItems.forEach(item => {
+            item.addEventListener('click', function() {
+                // Make sure context panel is open when clicking on a tool
+                const contextPanel = document.getElementById('context-panel');
+                if (contextPanel && contextPanel.classList.contains('collapsed')) {
+                    toggleContextPanel();
+                }
+            });
+        });
+    });
     
     // --- Theme Toggle ---
     function initializeTheme() {
@@ -759,7 +746,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
     
-    // --- WebSocket Connection ---
+    // --- WebSocket Connection Management ---
     function setupWebSocket() {
         if (!currentAgentId) {
             console.warn('No agent ID specified for WebSocket connection');
@@ -779,31 +766,26 @@ document.addEventListener('DOMContentLoaded', async () => {
         try {
             ws = new WebSocket(wsUrl);
 
-            // Connection timeout
-            const connectionTimeout = setTimeout(() => {
-                if (ws.readyState !== WebSocket.OPEN) {
-                    console.warn('WebSocket connection timeout');
-                    ws.close();
-                    handleWebSocketError(new Error('Connection timeout'));
-                }
-            }, 10000);
-
             ws.onopen = () => {
                 console.log('WebSocket connection established');
-                clearTimeout(connectionTimeout);
-                wsReconnectAttempts = 0; // Reset reconnection attempts on successful connection
-                addSystemMessage('Connected to agent', 'success');
+                wsReconnectAttempts = 0;
+                
+                // Only show connection message on first connection or after disconnection
+                if (!hasInitialConnection || wsReconnectAttempts > 0) {
+                    addSystemMessage('Connected to agent', 'success');
+                    hasInitialConnection = true;
+                }
             };
 
             ws.onclose = (event) => {
-                clearTimeout(connectionTimeout);
                 console.log('WebSocket connection closed:', event.code, event.reason);
+                hideThinkingIndicator();
+                enableInput();
                 
                 if (wsReconnectAttempts < MAX_WS_RECONNECT_ATTEMPTS) {
                     wsReconnectAttempts++;
                     const delay = WS_RECONNECT_DELAY * Math.pow(2, wsReconnectAttempts - 1);
-                    console.log(`Attempting to reconnect (${wsReconnectAttempts}/${MAX_WS_RECONNECT_ATTEMPTS}) in ${delay/1000}s...`);
-                    addSystemMessage(`Connection lost. Reconnecting in ${delay/1000}s...`, 'warning');
+                    showConnectionStatus('reconnecting', delay);
                     
                     setTimeout(() => {
                         if (document.visibilityState === 'visible') {
@@ -811,8 +793,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         }
                     }, delay);
                 } else {
-                    console.error('Max reconnection attempts reached');
-                    addSystemMessage('Could not reconnect to agent. Please refresh the page.', 'error');
+                    showConnectionStatus('failed');
                 }
             };
 
@@ -822,12 +803,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             };
 
             ws.onmessage = (event) => {
+                console.log('Received WebSocket message:', event.data);
                 try {
                     const message = JSON.parse(event.data);
                     handleWebSocketMessage(message);
                 } catch (error) {
                     console.error('Error processing WebSocket message:', error);
-                    addSystemMessage('Error processing message from agent', 'error');
+                    addSystemMessage('Error processing message', 'error');
                 }
             };
 
@@ -847,140 +829,534 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     function handleWebSocketMessage(message) {
-        if (!message || !message.type) {
-            console.warn('Invalid message format:', message);
-            return;
+        if (!message || !message.type) return;
+        
+        console.log('Processing message:', message);
+        
+        // Validate output with guardrails
+        if (message.content && ['agent_message', 'system'].includes(message.type)) {
+            const validationResult = validateResponse(message.content, currentAgentId);
+            
+            if (!validationResult.valid) {
+                console.error('Invalid response:', validationResult.reason);
+                addSystemMessage(`The agent response was invalid: ${validationResult.reason}`, 'error');
+                isProcessing = false;
+                enableInput();
+                hideThinkingIndicator();
+                return;
+            }
         }
-
+        
+        // Handle tool requests
+        if (message.content && message.content.toLowerCase().includes('please use the')) {
+            const toolMatch = message.content.match(/please use the (.*?) tool/i);
+            if (toolMatch) {
+                const requestedTool = toolMatch[1];
+                const tool = availableTools.find(t => 
+                    t.name.toLowerCase() === requestedTool.toLowerCase());
+                
+                if (tool) {
+                    addSystemMessage(`Using ${tool.name} tool...`, 'info');
+                    // Send tool usage message
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({
+                            type: 'tool_request',
+                            tool_id: tool.id,
+                            content: message.content,
+                            agent_id: currentAgentId,
+                            timestamp: new Date().toISOString()
+                        }));
+                    }
+                    return;
+                }
+            }
+        }
+        
         switch (message.type) {
             case 'agent_message':
-                addAgentMessage(message.content, message.role || 'AI');
+                hideThinkingIndicator();
+                // Only show default response if it's not following a tool request
+                if (message.content === defaultAgentResponse && lastMessageWasDefault) {
+                    console.log('Skipping duplicate default response');
+                    return;
+                }
+                
+                addAgentMessage(message.content, message.agent_name);
+                lastMessageWasDefault = (message.content === defaultAgentResponse);
                 break;
-            case 'system_message':
-                addSystemMessage(message.content, message.level || 'info');
+                
+            case 'tool_response':
+                hideThinkingIndicator();
+                if (message.result) {
+                    addSystemMessage(`Tool result: ${message.result}`, 'success');
+                    updateToolUsage({
+                        tool_name: message.tool_name,
+                        input_data: message.input || 'Not specified',
+                        output_data: message.result
+                    });
+                }
                 break;
+                
+            case 'thinking':
+                showThinkingIndicator();
+                break;
+                
             case 'error':
+                hideThinkingIndicator();
                 addSystemMessage(message.content, 'error');
                 break;
-            case 'typing_indicator':
-                updateTypingIndicator(message.isTyping);
+                
+            case 'system':
+                // Skip initial connection message if we've already shown one
+                if (message.content && message.content.includes('Connected') && hasInitialConnection) {
+                    console.log('Skipping duplicate connection message');
+                    return;
+                }
+                
+                hideThinkingIndicator();
+                addSystemMessage(message.content, message.status || 'info');
                 break;
+                
+            case 'handoff':
+                hideThinkingIndicator();
+                addSystemMessage(`Transferring to ${message.to_agent_name}...`, 'info');
+                
+                // Update current agent ID and name
+                currentAgentId = message.to_agent_id;
+                if (currentAgentName) {
+                    currentAgentName.textContent = message.to_agent_name;
+                }
+                
+                // Reset connection state for new agent
+                hasInitialConnection = false;
+                wsReconnectAttempts = 0;
+                
+                // Set up new WebSocket connection
+                setupWebSocket();
+                break;
+                
+            case 'reasoning':
+                if (message.steps && message.steps.length > 0) {
+                    message.steps.forEach((step, index) => {
+                        addReasoningStep({
+                            step_number: index + 1,
+                            content: step
+                        });
+                    });
+                }
+                break;
+                
             default:
-                console.warn('Unknown message type:', message.type);
+                console.warn('Unhandled message type:', message.type);
+                break;
+        }
+        
+        isProcessing = false;
+        enableInput();
+    }
+
+    function updateToolUsage(toolData) {
+        const toolUsageContent = document.getElementById('tool-usage-content');
+        if (!toolUsageContent) return;
+        
+        // Remove empty state if present
+        const emptyState = toolUsageContent.querySelector('.empty-state');
+        if (emptyState) {
+            emptyState.remove();
+        }
+        
+        // Create tool usage item
+        const usageDiv = document.createElement('div');
+        usageDiv.className = 'tool-usage-item';
+        usageDiv.innerHTML = `
+            <div class="tool-usage-header">
+                <span class="tool-name">
+                    <i class="bi bi-tools"></i>
+                    ${toolData.tool_name}
+                </span>
+                <span class="timestamp">${new Date().toLocaleTimeString()}</span>
+            </div>
+            <div class="tool-usage-details">
+                <div class="input-data">
+                    <strong>Input:</strong>
+                    <pre>${toolData.input_data}</pre>
+                </div>
+                <div class="output-data">
+                    <strong>Output:</strong>
+                    <pre>${toolData.output_data}</pre>
+                </div>
+            </div>
+        `;
+        
+        toolUsageContent.appendChild(usageDiv);
+        toolUsageContent.scrollTop = toolUsageContent.scrollHeight;
+        
+        // Directly open context panel using DOM manipulation
+        const contextPanel = document.getElementById('context-panel');
+        if (contextPanel && contextPanel.classList.contains('collapsed')) {
+            toggleContextPanel();
+        }
+        
+        // Add direct click handler
+        usageDiv.addEventListener('click', function() {
+            // Ensure context panel is open when clicking on a tool
+            if (contextPanel && contextPanel.classList.contains('collapsed')) {
+                toggleContextPanel();
+            }
+        });
+    }
+
+    // --- UI State Management ---
+    function showThinkingIndicator() {
+        const typingIndicator = document.getElementById('typing-indicator');
+        if (typingIndicator) {
+            typingIndicator.innerHTML = `
+                <div class="thinking">
+                    <div class="dot"></div>
+                    <div class="dot"></div>
+                    <div class="dot"></div>
+                </div>
+            `;
+            typingIndicator.classList.remove('hidden');
         }
     }
 
-    // Visibility change handler for WebSocket
-    document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible') {
-            if (!ws || ws.readyState !== WebSocket.OPEN) {
-                console.log('Page visible, attempting to reconnect WebSocket');
-                wsReconnectAttempts = 0; // Reset attempts when user returns to page
-                setupWebSocket();
-            }
-        } else {
-            console.log('Page hidden, closing WebSocket connection');
-            if (ws) {
-                ws.close();
-                ws = null;
-            }
+    function hideThinkingIndicator() {
+        const typingIndicator = document.getElementById('typing-indicator');
+        if (typingIndicator) {
+            typingIndicator.classList.add('hidden');
         }
-    });
-    
-    // --- Message Handling ---
-    async function sendMessage(message) {
-        if (!message.trim() || isProcessing) return;
+    }
+
+    function showConnectionStatus(status, delay = null) {
+        let message = '';
+        let type = 'info';
         
-        // Clear input right away to prevent duplicate sends
-        const messageText = message.trim();
-        messageInput.value = '';
-        messageInput.style.height = 'auto';
-        
-        isProcessing = true;
-        messageInput.disabled = true;
-        sendButton.disabled = true;
-        sendButton.innerHTML = '<div class="spinner"></div>';
-        
-        // Add user message to UI immediately
-        addUserMessage(messageText);
-        
-        // Check if WebSocket is connected - use that if possible
-        if (ws && ws.readyState === WebSocket.OPEN) {
-            console.log("Sending message via WebSocket");
-            try {
-                // Send via WebSocket
-                ws.send(JSON.stringify({
-                    type: 'message',
-                    content: messageText,
-                    agent_id: currentAgentId,
-                    sender: 'user',
-                    model: currentModel
-                }));
-                
-                // Add a small delay to simulate thinking
-                setTimeout(() => {
-                    // No need to re-enable input immediately, it will be enabled when the response is received
-                    sendButton.innerHTML = '<i class="bi bi-send-fill"></i>';
-                }, 500);
-                
-                // Note: We're not setting isProcessing = false here because we're
-                // waiting for the response via WebSocket
-                
-                return; // Exit early if sent via WebSocket
-            } catch (wsError) {
-                console.error("WebSocket send error:", wsError);
-                // Fall back to REST API below if WebSocket fails
-            }
+        switch (status) {
+            case 'connected':
+                message = 'Connected to agent';
+                type = 'success';
+                break;
+            case 'disconnected':
+                message = 'Disconnected from agent';
+                type = 'warning';
+                break;
+            case 'reconnecting':
+                message = `Connection lost. Reconnecting in ${delay/1000}s...`;
+                type = 'warning';
+                break;
+            case 'failed':
+                message = 'Connection failed. Please refresh the page.';
+                type = 'error';
+                break;
+            case 'error':
+                message = 'Connection error occurred';
+                type = 'error';
+                break;
         }
         
-        // If WebSocket is not available or fails, use REST API
-        console.log("Using REST API fallback");
-        try {
-            const response = await fetch(`${API_CONFIG.BASE_URL}/api/agents/${currentAgentId}/messages`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                },
-                body: JSON.stringify({
-                    agent_id: currentAgentId,
-                    content: messageText,
-                    sender: 'user',
-                    model: currentModel
-                })
-            });
-            
-            if (!response.ok) {
-                throw new Error(`HTTP error ${response.status}: ${response.statusText}`);
+        addSystemMessage(message, type);
+    }
+
+    function showError(message) {
+        console.error('Error:', message);
+        addSystemMessage(message, 'error');
+    }
+
+    function showToolUsage(tool, status, result = null) {
+        const toolUsageContent = document.getElementById('tool-usage-content');
+        if (!toolUsageContent) return;
+        
+        const timestamp = new Date().toLocaleTimeString();
+        
+        if (status === 'start') {
+            const usageDiv = document.createElement('div');
+            usageDiv.className = 'tool-usage-item';
+            usageDiv.innerHTML = `
+                <div class="tool-usage-header">
+                    <span class="tool-name">${tool.name}</span>
+                    <span class="tool-status">Running...</span>
+                    <span class="timestamp">${timestamp}</span>
+                </div>
+            `;
+            toolUsageContent.appendChild(usageDiv);
+        } else if (status === 'end' && result) {
+            const lastUsage = toolUsageContent.lastElementChild;
+            if (lastUsage) {
+                lastUsage.querySelector('.tool-status').textContent = 'Completed';
+                lastUsage.innerHTML += `
+                    <div class="tool-result">
+                        <pre>${JSON.stringify(result, null, 2)}</pre>
+                    </div>
+                `;
             }
-            
-            // Process the response
-            const data = await response.json();
-            console.log("REST API response:", data);
-            
-            // Display reasoning steps if present
-            if (data.reasoning_steps && data.reasoning_steps.length > 0) {
-                data.reasoning_steps.forEach(step => addReasoningStep(step));
-            }
-            
-            // Check if the response contains tool usage
-            if (data.tool_usage) {
-                addToolUsage(data.tool_usage);
-            }
-            
-            // Add agent response to chat
-            addAgentMessage(data.content);
-            
-        } catch (error) {
-            console.error("Error sending message:", error);
-            addSystemMessage(`Failed to send message: ${error.message}. Please try again.`, "error");
-        } finally {
-            isProcessing = false;
-            messageInput.disabled = false;
+        }
+        
+        toolUsageContent.scrollTop = toolUsageContent.scrollHeight;
+    }
+
+    function disableInput() {
+        if (messageInput) messageInput.disabled = true;
+        if (sendButton) {
+            sendButton.disabled = true;
+            sendButton.innerHTML = '<div class="spinner"></div>';
+        }
+    }
+
+    function enableInput() {
+        if (messageInput) messageInput.disabled = false;
+        if (sendButton) {
             sendButton.disabled = false;
             sendButton.innerHTML = '<i class="bi bi-send-fill"></i>';
         }
     }
+
+    // --- Message Handling with Orchestration and Guardrails ---
+    async function sendMessage(message) {
+        if (!message.trim() || isProcessing) return;
+        
+        console.log('Sending message:', message);
+        
+        const messageText = message.trim();
+        messageInput.value = '';
+        messageInput.style.height = 'auto';
+        
+        // Apply input guardrails
+        const safetyCheck = checkMessageSafety(messageText);
+        if (!safetyCheck.safe) {
+            addSystemMessage(`We cannot process your message: ${safetyCheck.reason}`, 'error');
+            return;
+        }
+        
+        isProcessing = true;
+        showThinkingIndicator();
+        disableInput();
+        
+        addUserMessage(messageText);
+        
+        try {
+            // Use manager to route to appropriate agent
+            const routingResult = await routeToAgent(messageText);
+            console.log("Message routed to agent:", routingResult);
+            
+            // Add context about routing decision
+            updateContextChain([{
+                type: "Routing",
+                content: `Message routed to ${routingResult.agentName} (confidence: ${Math.round(routingResult.confidence * 100)}%) because: ${routingResult.reason}`
+            }]);
+            
+            // If routing suggests a different agent than the current one, perform handoff
+            if (routingResult.agentId !== currentAgentId) {
+                addSystemMessage(`Transferring to ${routingResult.agentName} for better assistance...`, 'info');
+                
+                const handoffResult = await handoffToAgent(
+                    currentAgentId,
+                    routingResult.agentId,
+                    messageText,
+                    { previousMessages: getConversationContext() }
+                );
+                
+                if (handoffResult.success) {
+                    // Update the current agent
+                    currentAgentId = routingResult.agentId;
+                    if (currentAgentName) {
+                        currentAgentName.textContent = routingResult.agentName;
+                    }
+                    
+                    // Set up new WebSocket connection to the new agent
+                    setupWebSocket();
+                    
+                    // Add to context chain
+                    addReasoningStep({
+                        step_number: 1,
+                        content: `Handoff initiated to ${routingResult.agentName} to better handle your request.`
+                    });
+                } else {
+                    // Handoff failed, continue with current agent
+                    addSystemMessage(`Continuing with current agent due to handoff error.`, 'warning');
+                }
+            }
+            
+            // Check if message contains tool request
+            if (messageText.toLowerCase().includes('please use the')) {
+                const toolMatch = messageText.match(/please use the (.*?) tool/i);
+                if (toolMatch) {
+                    const requestedTool = toolMatch[1];
+                    // Validate tool usage
+                    const toolValidation = validateToolUse(requestedTool.toLowerCase().replace(' ', '_'), messageText);
+                    
+                    if (!toolValidation.allowed) {
+                        addSystemMessage(`Cannot use the ${requestedTool} tool: ${toolValidation.reason}`, 'error');
+                        isProcessing = false;
+                        hideThinkingIndicator();
+                        enableInput();
+                        return;
+                    }
+                    
+                    // If tool requires confirmation, show confirmation UI
+                    if (toolValidation.requiresConfirmation) {
+                        addSystemMessage(`The ${requestedTool} tool requires confirmation before use. Click "Confirm" to proceed.`, 'warning');
+                        showToolConfirmation(requestedTool, messageText);
+                        return;
+                    }
+                    
+                    // Tool use is allowed without confirmation
+                    addSystemMessage(`Using ${requestedTool} tool...`, 'info');
+                }
+            }
+            
+            // Send message via WebSocket
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    type: 'message',
+                    content: messageText,
+                    agent_id: currentAgentId,
+                    model: currentModel,
+                    timestamp: new Date().toISOString()
+                }));
+            } else {
+                showError('Not connected to agent');
+                hideThinkingIndicator();
+                enableInput();
+            }
+        } catch (error) {
+            console.error('Error sending message:', error);
+            addSystemMessage('Failed to process your message. Please try again.', 'error');
+            hideThinkingIndicator();
+            enableInput();
+            isProcessing = false;
+        }
+    }
+
+    // Get conversation context for handoffs
+    function getConversationContext() {
+        const messages = [];
+        const messageElements = chatMessages.querySelectorAll('.message');
+        
+        messageElements.forEach(msgEl => {
+            if (msgEl.classList.contains('user')) {
+                messages.push({
+                    type: 'user',
+                    content: msgEl.querySelector('.message-content p').textContent
+                });
+            } else if (msgEl.classList.contains('agent')) {
+                messages.push({
+                    type: 'agent',
+                    content: msgEl.querySelector('.message-content p').textContent
+                });
+            }
+        });
+        
+        return messages.slice(-10); // Return the last 10 messages
+    }
+
+    // Show tool confirmation UI
+    function showToolConfirmation(toolName, message) {
+        // Create or get confirmation UI
+        let confirmationUI = document.getElementById('tool-confirmation');
+        if (!confirmationUI) {
+            confirmationUI = document.createElement('div');
+            confirmationUI.id = 'tool-confirmation';
+            confirmationUI.className = 'tool-confirmation-ui';
+            chatMessages.appendChild(confirmationUI);
+        }
+        
+        confirmationUI.innerHTML = `
+            <div class="confirmation-message">
+                <p>Do you want to use the <strong>${toolName}</strong> tool?</p>
+                <p>This action requires confirmation for security reasons.</p>
+                <div class="confirmation-buttons">
+                    <button class="btn btn-primary confirm-btn">Confirm</button>
+                    <button class="btn btn-secondary cancel-btn">Cancel</button>
+                </div>
+            </div>
+        `;
+        
+        // Add event listeners
+        confirmationUI.querySelector('.confirm-btn').addEventListener('click', () => {
+            // Send tool request with confirmation
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    type: 'tool_request',
+                    tool_name: toolName.toLowerCase().replace(' ', '_'),
+                    content: message,
+                    confirmed: true,
+                    agent_id: currentAgentId,
+                    timestamp: new Date().toISOString()
+                }));
+            }
+            
+            confirmationUI.remove();
+            addSystemMessage(`Using ${toolName} tool after confirmation...`, 'info');
+        });
+        
+        confirmationUI.querySelector('.cancel-btn').addEventListener('click', () => {
+            confirmationUI.remove();
+            addSystemMessage(`Tool usage canceled.`, 'info');
+            hideThinkingIndicator();
+            enableInput();
+            isProcessing = false;
+        });
+        
+        scrollToBottom(chatMessages, true);
+    }
+
+    // --- Initialize Chat ---
+    let hasInitialConnection = false;
+    let isInitialLoad = true;
+    let lastMessageWasDefault = false;
+    const defaultAgentResponse = "As a Research Assistant, I can help you with: Literature Review, Data Analysis, Citation Management. How can I assist with your research?";
+
+    function initializeChat() {
+        // Clear chat history
+        const chatMessages = document.getElementById('chat-messages');
+        if (chatMessages) {
+            chatMessages.innerHTML = '';
+        }
+
+        // Reset context panels
+        const contextChainContent = document.getElementById('context-chain-content');
+        const reasoningStepsContent = document.getElementById('reasoning-steps-content');
+        const toolUsageContent = document.getElementById('tool-usage-content');
+
+        if (contextChainContent) {
+            contextChainContent.innerHTML = `
+                <div class="empty-state">
+                    <p>No context chain available</p>
+                </div>
+            `;
+        }
+
+        if (reasoningStepsContent) {
+            reasoningStepsContent.innerHTML = `
+                <div class="empty-state">
+                    <p>No reasoning steps available</p>
+                </div>
+            `;
+        }
+
+        if (toolUsageContent) {
+            toolUsageContent.innerHTML = `
+                <div class="empty-state">
+                    <p>No tools have been used yet</p>
+                </div>
+            `;
+        }
+
+        // Initialize WebSocket connection
+        setupWebSocket();
+    }
+
+    // Initialize when DOM content loaded
+    document.addEventListener('DOMContentLoaded', () => {
+        initializeTools();
+        initializeChat();
+        
+        // Clear initial load flag after a short delay
+        setTimeout(() => {
+            isInitialLoad = false;
+        }, 1000);
+    });
     
     async function resetChat() {
         // Clear UI
@@ -1120,22 +1496,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                 throw new Error("API configuration is missing or invalid. Check if base.js is loaded correctly.");
             }
             
-            // Check backend health
-            try {
-                const healthResponse = await retryFetch(`${API_CONFIG.BASE_URL}/api/health`, {
-                    ...defaultFetchOptions,
-                    method: 'GET'
-                });
-                
-                const healthData = await healthResponse.json();
-                if (healthData.status !== 'ok') {
-                    throw new Error('Backend health check failed');
-                }
-            } catch (error) {
-                console.error("Backend health check failed:", error);
-                addSystemMessage(`Cannot connect to backend. Using offline mode.`, "error");
-                loadSimulatedData();
-                return;
+            // Check backend health with the new implementation
+            const isHealthy = await checkBackendHealth();
+            if (!isHealthy) {
+                throw new Error("Backend health check failed");
             }
             
             // Load agents with retry
@@ -1246,94 +1610,164 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
-    // Initialize context panel functionality
+    // --- Context Panel Management ---
     function initializeContextPanel() {
+        // Initialize panel sections
+        initializePanelSection('context-chain', 'Context Chain', 'bi-diagram-2');
+        initializePanelSection('reasoning-steps', 'Reasoning Steps', 'bi-list-check');
+        initializePanelSection('tool-usage', 'Tool Usage', 'bi-tools');
+        
+        // Set initial state for context panel
         const contextPanel = document.getElementById('context-panel');
-        const contextChainSection = document.getElementById('context-chain');
-        const reasoningStepsSection = document.getElementById('reasoning-steps');
-        const toolUsageSection = document.getElementById('tool-usage');
-        const contextResizeHandle = document.getElementById('context-resize-handle');
-        const contextMinimizeBtn = document.getElementById('context-minimize');
+        const chatLayout = document.querySelector('.chat-layout');
         
-        // Toggle individual sections
-        document.querySelectorAll('.toggle-section').forEach(button => {
-            button.addEventListener('click', () => {
-                const targetId = button.getAttribute('data-target');
-                const targetContent = document.getElementById(targetId);
-                const parentSection = button.closest('.context-section');
-                
-                if (parentSection) {
-                    parentSection.classList.toggle('collapsed');
-                    const isCollapsed = parentSection.classList.contains('collapsed');
-                    
-                    // Update icon
-                    const icon = button.querySelector('i');
-                    if (icon) {
-                        icon.className = isCollapsed ? 'bi bi-chevron-down' : 'bi bi-chevron-up';
-                    }
+        if (contextPanel && chatLayout) {
+            if (!contextPanel.classList.contains('collapsed')) {
+                chatLayout.classList.add('show-context');
+            }
+        }
+    }
+    
+    function initializePanelSection(id, title, icon) {
+        const section = document.getElementById(id);
+        if (!section) return;
+        
+        section.innerHTML = `
+            <div class="section-header">
+                <h6 class="section-title">
+                    <i class="bi ${icon}"></i>
+                    ${title}
+                </h6>
+                <button class="btn btn-sm btn-icon clear-section" title="Clear ${title}">
+                    <i class="bi bi-trash"></i>
+                </button>
+            </div>
+            <div id="${id}-content" class="section-content">
+                <div class="empty-state">
+                    <i class="bi ${icon} text-muted"></i>
+                    <p class="text-muted">No ${title.toLowerCase()} available</p>
+                </div>
+            </div>
+        `;
+        
+        // Add clear functionality
+        const clearBtn = section.querySelector('.clear-section');
+        if (clearBtn) {
+            clearBtn.addEventListener('click', () => {
+                const contentDiv = section.querySelector('.section-content');
+                if (contentDiv) {
+                    contentDiv.innerHTML = `
+                        <div class="empty-state">
+                            <i class="bi ${icon} text-muted"></i>
+                            <p class="text-muted">No ${title.toLowerCase()} available</p>
+                        </div>
+                    `;
                 }
-            });
-        });
-        
-        // Section toggle buttons in header
-        document.getElementById('toggle-context-chain').addEventListener('click', (e) => {
-            e.target.closest('button').classList.toggle('active');
-            contextChainSection.classList.toggle('d-none');
-        });
-        
-        document.getElementById('toggle-reasoning').addEventListener('click', (e) => {
-            e.target.closest('button').classList.toggle('active');
-            reasoningStepsSection.classList.toggle('d-none');
-        });
-        
-        document.getElementById('toggle-tools').addEventListener('click', (e) => {
-            e.target.closest('button').classList.toggle('active');
-            toolUsageSection.classList.toggle('d-none');
-        });
-        
-        // Minimize/Maximize button
-        if (contextMinimizeBtn) {
-            contextMinimizeBtn.addEventListener('click', () => {
-                contextPanel.classList.toggle('minimized');
-                
-                // Update button icon and title
-                const isMinimized = contextPanel.classList.contains('minimized');
-                contextMinimizeBtn.innerHTML = isMinimized 
-                    ? '<i class="bi bi-arrows-angle-expand"></i>' 
-                    : '<i class="bi bi-arrows-angle-contract"></i>';
-                contextMinimizeBtn.title = isMinimized ? 'Maximize panel' : 'Minimize panel';
             });
         }
+    }
+    
+    // --- Tool Management ---
+    function initializeTools() {
+        const toolsBar = document.getElementById('tools-bar');
+        const headerToolsBar = document.getElementById('header-tools-bar');
         
-        // Resize functionality (basic)
-        if (contextResizeHandle) {
-            let startX, startWidth;
+        if (!toolsBar) {
+            console.error('Tools bar element not found');
+            return;
+        }
+        
+        // Clear existing tools
+        toolsBar.innerHTML = '';
+        if (headerToolsBar) {
+            headerToolsBar.innerHTML = '';
+        }
+        
+        // Add tools header
+        const toolsHeader = document.createElement('div');
+        toolsHeader.className = 'tools-header mb-2';
+        toolsHeader.innerHTML = '<span>Click on a tool to use it</span>';
+        toolsBar.appendChild(toolsHeader);
+        
+        // Tool icons with colors
+        const iconMap = {
+            'Web Search': { icon: 'bi-search', color: 'primary' },
+            'Code Analysis': { icon: 'bi-code-square', color: 'success' },
+            'Text Processing': { icon: 'bi-file-text', color: 'info' }
+        };
+        
+        // Create tool buttons
+        availableTools.forEach(tool => {
+            const iconInfo = iconMap[tool.name] || { icon: 'bi-tools', color: 'secondary' };
             
-            contextResizeHandle.addEventListener('mousedown', (e) => {
-                startX = e.clientX;
-                startWidth = parseInt(document.defaultView.getComputedStyle(contextPanel).width, 10);
-                document.documentElement.style.cursor = 'ew-resize';
-                
-                // Add event listeners for dragging
-                document.addEventListener('mousemove', resize);
-                document.addEventListener('mouseup', stopResize);
-                
-                // Prevent text selection during resize
-                e.preventDefault();
+            // Create sidebar tool button
+            const toolDiv = document.createElement('div');
+            toolDiv.className = 'tool-icon';
+            toolDiv.innerHTML = `
+                <i class="bi ${iconInfo.icon} text-${iconInfo.color}"></i>
+                <span>${tool.name}</span>
+            `;
+            
+            toolDiv.addEventListener('click', () => {
+                const prompt = `Please use the ${tool.name} tool to help me with my task.`;
+                if (messageInput) {
+                    messageInput.value = prompt;
+                    messageInput.focus();
+                    messageInput.dispatchEvent(new Event('input'));
+                }
             });
             
-            function resize(e) {
-                const width = startWidth - (e.clientX - startX);
-                if (width > 250 && width < 600) {
-                    contextPanel.style.width = `${width}px`;
-                }
+            toolsBar.appendChild(toolDiv);
+            
+            // Create header tool button if header tools bar exists
+            if (headerToolsBar) {
+                const headerToolBtn = document.createElement('button');
+                headerToolBtn.className = `btn btn-icon btn-sm tool-header-icon`;
+                headerToolBtn.title = tool.name;
+                headerToolBtn.innerHTML = `<i class="bi ${iconInfo.icon} text-${iconInfo.color}"></i>`;
+                
+                headerToolBtn.addEventListener('click', () => {
+                    const prompt = `Please use the ${tool.name} tool to help me with my task.`;
+                    if (messageInput) {
+                        messageInput.value = prompt;
+                        messageInput.focus();
+                        messageInput.dispatchEvent(new Event('input'));
+                    }
+                });
+                
+                headerToolsBar.appendChild(headerToolBtn);
+            }
+        });
+    }
+    
+    // Update the health check implementation
+    async function checkBackendHealth() {
+        try {
+            console.log("Checking backend health at:", `${API_CONFIG.BASE_URL}/api/health`);
+            const healthResponse = await fetch(`${API_CONFIG.BASE_URL}/api/health`, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json'
+                },
+                mode: 'cors',
+                credentials: 'include'
+            });
+            
+            if (!healthResponse.ok) {
+                throw new Error(`HTTP error! status: ${healthResponse.status}`);
             }
             
-            function stopResize() {
-                document.documentElement.style.cursor = '';
-                document.removeEventListener('mousemove', resize);
-                document.removeEventListener('mouseup', stopResize);
+            const healthData = await healthResponse.json();
+            console.log("Health check response:", healthData);
+            
+            if (healthData.status !== 'healthy') {
+                throw new Error(`Unexpected health status: ${healthData.status}`);
             }
+            
+            return true;
+        } catch (error) {
+            console.error("Backend health check failed:", error);
+            return false;
         }
     }
 });

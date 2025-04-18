@@ -1,0 +1,201 @@
+/* Agent-specific styles */
+
+/* Tool confirmation UI */
+.tool-confirmation-ui {
+    background: var(--bs-light);
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.5rem;
+    margin: 0.75rem 0;
+    padding: 1rem;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+[data-bs-theme="dark"] .tool-confirmation-ui {
+    background: var(--bs-dark);
+    border-color: var(--bs-border-color-translucent);
+}
+
+.confirmation-message {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.confirmation-buttons {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+    justify-content: flex-end;
+}
+
+/* Agent handoff indicators */
+.handoff-indicator {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem;
+    border-radius: 0.25rem;
+    background-color: rgba(var(--bs-info-rgb), 0.1);
+    margin: 0.5rem 0;
+}
+
+/* Context panel enhancements */
+.context-node {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-width: 100px;
+    height: 80px;
+    padding: 0.5rem;
+    background: var(--bs-light);
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.5rem;
+    margin-right: 0.5rem;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.2s ease;
+}
+
+[data-bs-theme="dark"] .context-node {
+    background: var(--bs-dark);
+}
+
+.context-node.active {
+    border-color: var(--bs-primary);
+    background-color: rgba(var(--bs-primary-rgb), 0.1);
+}
+
+.context-node i {
+    font-size: 1.5rem;
+    margin-bottom: 0.25rem;
+    color: var(--bs-primary);
+}
+
+.context-node-tooltip {
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--bs-dark);
+    color: var(--bs-light);
+    padding: 0.5rem;
+    border-radius: 0.25rem;
+    max-width: 300px;
+    z-index: 1000;
+    display: none;
+    font-size: 0.75rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.context-node:hover .context-node-tooltip {
+    display: block;
+}
+
+/* Reasoning steps */
+.reasoning-step {
+    padding: 0.75rem;
+    margin-bottom: 0.5rem;
+    border-left: 3px solid var(--bs-primary);
+    background-color: rgba(var(--bs-primary-rgb), 0.05);
+    border-radius: 0 0.25rem 0.25rem 0;
+}
+
+/* Tool usage styling */
+.tool-usage-item {
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.5rem;
+    margin-bottom: 0.75rem;
+    overflow: hidden;
+}
+
+.tool-usage-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0.75rem;
+    background-color: rgba(var(--bs-primary-rgb), 0.1);
+    border-bottom: 1px solid var(--bs-border-color);
+}
+
+.tool-name {
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.tool-usage-details {
+    padding: 0.75rem;
+}
+
+.input-data, .output-data {
+    margin-bottom: 0.5rem;
+}
+
+.input-data pre, .output-data pre {
+    background-color: var(--bs-light);
+    padding: 0.5rem;
+    border-radius: 0.25rem;
+    font-size: 0.85rem;
+    max-height: 150px;
+    overflow-y: auto;
+    margin-top: 0.25rem;
+}
+
+[data-bs-theme="dark"] .input-data pre,
+[data-bs-theme="dark"] .output-data pre {
+    background-color: var(--bs-dark);
+}
+
+/* Risk level indicators */
+.risk-low {
+    color: var(--bs-success);
+}
+
+.risk-medium {
+    color: var(--bs-warning);
+}
+
+.risk-high {
+    color: var(--bs-danger);
+}
+
+/* Enhanced thinking indicator */
+.thinking {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem;
+    padding: 0.5rem;
+}
+
+.thinking .dot {
+    width: 8px;
+    height: 8px;
+    background-color: var(--bs-primary);
+    border-radius: 50%;
+    opacity: 0.6;
+    animation: pulse 1.5s infinite ease-in-out;
+}
+
+.thinking .dot:nth-child(2) {
+    animation-delay: 0.3s;
+}
+
+.thinking .dot:nth-child(3) {
+    animation-delay: 0.6s;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        transform: scale(0.8);
+        opacity: 0.6;
+    }
+    50% {
+        transform: scale(1.2);
+        opacity: 1;
+    }
+} 

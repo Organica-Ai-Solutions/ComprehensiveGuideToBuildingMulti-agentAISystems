@@ -1,0 +1,238 @@
+/* Intervention Panel Styles */
+#intervention-panel {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 1000;
+    max-width: 800px;
+    width: 90%;
+    max-height: 90vh;
+    overflow-y: auto;
+    display: none;
+}
+
+.intervention-container {
+    padding: 24px;
+}
+
+.intervention-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid #eee;
+}
+
+.intervention-header h3 {
+    margin: 0;
+    color: #2c3e50;
+    font-size: 1.5em;
+}
+
+.priority-badge {
+    padding: 4px 12px;
+    border-radius: 16px;
+    font-size: 0.9em;
+    font-weight: 500;
+    text-transform: uppercase;
+}
+
+.priority-badge.high {
+    background-color: #fee2e2;
+    color: #dc2626;
+}
+
+.priority-badge.medium {
+    background-color: #fef3c7;
+    color: #d97706;
+}
+
+.priority-badge.low {
+    background-color: #e0f2fe;
+    color: #0284c7;
+}
+
+.intervention-content {
+    margin-bottom: 24px;
+}
+
+.intervention-content pre {
+    background: #f8f9fa;
+    padding: 16px;
+    border-radius: 4px;
+    overflow-x: auto;
+    margin: 12px 0;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 0.9em;
+}
+
+.safety-issues {
+    margin-top: 16px;
+}
+
+.safety-issue {
+    padding: 12px;
+    border-radius: 4px;
+    margin-bottom: 8px;
+}
+
+.safety-issue.high {
+    background-color: #fee2e2;
+    border-left: 4px solid #dc2626;
+}
+
+.safety-issue.medium {
+    background-color: #fef3c7;
+    border-left: 4px solid #d97706;
+}
+
+.safety-issue.low {
+    background-color: #e0f2fe;
+    border-left: 4px solid #0284c7;
+}
+
+.tool-details {
+    background: #f8f9fa;
+    padding: 16px;
+    border-radius: 4px;
+    margin: 12px 0;
+}
+
+.intervention-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    margin-top: 24px;
+    padding-top: 16px;
+    border-top: 1px solid #eee;
+}
+
+.btn {
+    padding: 8px 16px;
+    border-radius: 4px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: none;
+    outline: none;
+}
+
+.btn:hover {
+    transform: translateY(-1px);
+}
+
+.btn:active {
+    transform: translateY(0);
+}
+
+.btn-danger {
+    background-color: #dc2626;
+    color: white;
+}
+
+.btn-danger:hover {
+    background-color: #b91c1c;
+}
+
+.btn-warning {
+    background-color: #d97706;
+    color: white;
+}
+
+.btn-warning:hover {
+    background-color: #b45309;
+}
+
+.btn-success {
+    background-color: #059669;
+    color: white;
+}
+
+.btn-success:hover {
+    background-color: #047857;
+}
+
+/* Animation */
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translate(-50%, -48%);
+    }
+    to {
+        opacity: 1;
+        transform: translate(-50%, -50%);
+    }
+}
+
+#intervention-panel.visible {
+    display: block;
+    animation: slideIn 0.3s ease-out forwards;
+}
+
+/* Responsive Design */
+@media (max-width: 640px) {
+    #intervention-panel {
+        width: 95%;
+        max-height: 95vh;
+    }
+
+    .intervention-container {
+        padding: 16px;
+    }
+
+    .intervention-actions {
+        flex-direction: column;
+    }
+
+    .btn {
+        width: 100%;
+        margin-bottom: 8px;
+    }
+}
+
+/* Dark Mode Support */
+@media (prefers-color-scheme: dark) {
+    #intervention-panel {
+        background: #1a1a1a;
+        color: #e5e5e5;
+    }
+
+    .intervention-header {
+        border-bottom-color: #333;
+    }
+
+    .intervention-header h3 {
+        color: #e5e5e5;
+    }
+
+    .intervention-content pre,
+    .tool-details {
+        background: #2d2d2d;
+        color: #e5e5e5;
+    }
+
+    .intervention-actions {
+        border-top-color: #333;
+    }
+
+    .priority-badge.high {
+        background-color: rgba(220, 38, 38, 0.2);
+    }
+
+    .priority-badge.medium {
+        background-color: rgba(217, 119, 6, 0.2);
+    }
+
+    .priority-badge.low {
+        background-color: rgba(2, 132, 199, 0.2);
+    }
+
+    .safety-issue {
+        background-color: #2d2d2d;
+    }
+} 

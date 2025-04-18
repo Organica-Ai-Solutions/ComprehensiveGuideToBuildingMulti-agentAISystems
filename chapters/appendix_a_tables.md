@@ -67,6 +67,17 @@ This appendix provides quick-reference tables that summarize the key concepts, f
 | **Managed Services** | Using cloud provider agent services | Rapid deployment, minimal management | Vendor lock-in, customization limits |
 | **Self-hosted** | Running agents on dedicated infrastructure | Full control, data privacy | Operational overhead, scaling complexity |
 
+## Table 7: Testing Strategies for Multi-Agent Systems
+
+| Test Category | Components | Tools & Frameworks | Key Metrics |
+|--------------|------------|-------------------|-------------|
+| **Unit Testing** | Agent Processors, Safety Guardrails, Tool Handlers | Jest, Pytest, Mock Libraries | Code Coverage, Test Pass Rate |
+| **Integration Testing** | Agent Orchestration, API Integration, WebSocket Communication | Supertest, WebSocket Test Clients | End-to-End Success Rate, Response Times |
+| **Safety Testing** | Code Execution, Resource Usage, Content Filtering | Custom Safety Validators, Resource Monitors | Safety Violations, Resource Thresholds |
+| **Performance Testing** | Response Times, Resource Usage, Scalability | Artillery, K6, Custom Load Tests | Latency, Throughput, Error Rates |
+| **UI/UX Testing** | Frontend Components, User Interactions, Accessibility | Jest, React Testing Library, Cypress | User Flow Success, Accessibility Score |
+| **AI-Specific Testing** | Model Behavior, Prompt Engineering, Output Quality | Custom Validators, GPT Evaluators | Output Quality Score, Hallucination Rate |
+
 ## How to Use These Tables
 
 These reference tables can be used in several ways:
@@ -74,5 +85,6 @@ These reference tables can be used in several ways:
 - To compare different reasoning paradigms when designing agent behavior
 - As a checklist when planning system architecture and deployment
 - For educational purposes to understand the landscape of multi-agent technologies
+- To guide testing strategy and quality assurance efforts
 
 The tables are intended to provide starting points rather than exhaustive information. Always refer to the respective chapters for detailed discussions of each topic and consult current documentation when implementing these technologies, as the field is rapidly evolving. 

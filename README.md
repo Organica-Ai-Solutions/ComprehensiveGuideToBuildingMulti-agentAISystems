@@ -10,6 +10,7 @@ A comprehensive guide and implementation for building multi-agent AI systems. Th
 ├── code/              # Implementation code
 │   ├── backend/       # FastAPI backend
 │   └── frontend/      # Frontend application
+│   └── tests/         # Test suites
 └── README.md          # This file
 ```
 
@@ -107,6 +108,96 @@ The `chapters/` directory contains detailed documentation about:
 - Cloud API & Deployment Strategies
 - Multi-Agent Communication Protocols
 - Implementation Best Practices
+
+## Testing Infrastructure
+
+The project includes comprehensive test suites for all major components:
+
+### Core Test Suites
+
+1. **Agent Processors Tests**
+   - Research processor validation
+   - Code processor safety checks
+   - API integration testing
+   - Error handling verification
+
+2. **Safety Guardrails Tests**
+   - Code safety validation
+   - Tool usage permissions
+   - Resource limit monitoring
+   - Content safety checks
+   - Metrics integration
+
+3. **Agent Orchestration Tests**
+   - Message processing validation
+   - Tool request handling
+   - Agent handoff management
+   - Resource usage monitoring
+   - Timeout handling
+
+### Running Tests
+
+1. Install test dependencies:
+   ```bash
+   pip install pytest pytest-asyncio
+   npm install jest @jest/globals
+   ```
+
+2. Run backend tests:
+   ```bash
+   cd code/backend
+   pytest tests/
+   ```
+
+3. Run frontend tests:
+   ```bash
+   cd code/frontend
+   npm test
+   ```
+
+### Test Coverage Areas
+
+- **Functionality Testing**
+  - UI interactions
+  - Form submissions
+  - Data display
+  - Error handling
+  - Token counting
+  - Metrics tracking
+  - Real-time updates
+
+- **Regression Testing**
+  - UI consistency
+  - API compatibility
+  - Backward compatibility
+
+- **Safety Testing**
+  - Code execution safety
+  - Resource limits
+  - Content filtering
+  - Tool usage permissions
+
+## Development Guidelines
+
+### Testing Guidelines
+
+1. **Writing Tests**
+   - Write tests for all new features
+   - Include both positive and negative test cases
+   - Mock external dependencies
+   - Test error handling paths
+
+2. **Test Organization**
+   - Group tests by functionality
+   - Use descriptive test names
+   - Maintain test isolation
+   - Clean up test resources
+
+3. **Continuous Integration**
+   - All tests must pass before merging
+   - Maintain test coverage above 80%
+   - Address test failures promptly
+   - Regular test suite maintenance
 
 ## Contributing
 
