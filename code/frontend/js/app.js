@@ -77,6 +77,10 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Chart reference
     let contextHistoryChart = null;
+    let chartData = {
+        labels: [],
+        data: []
+    };
 
     // Initialize data fetching AFTER DOM elements are initialized
     fetchAgents();
@@ -161,7 +165,7 @@ document.addEventListener('DOMContentLoaded', () => {
         showLoading(agentListElement);
         activeAgentsCountElement.textContent = '...';
         try {
-            const response = await fetch(`${API_CONFIG.BASE_URL}/api/agents`, {
+            const response = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.AGENTS}`, {
                 ...defaultFetchOptions,
                 method: 'GET'
             });
@@ -172,9 +176,9 @@ document.addEventListener('DOMContentLoaded', () => {
             updateAgentDropdown();
             updateSystemStatus('online', 'System Online');
         } catch (error) {
-            console.error("Error fetching agents:", error);
+            console.error('Failed to fetch agents:', error);
+            showError('agent-list', 'Failed to load agents');
             agentListElement.innerHTML = '';
-            showError('agent-list', `Failed to load agents: ${error.message}`);
             activeAgentsCountElement.textContent = 'Err';
             updateSystemStatus('error', 'Agent API Error');
         }
@@ -288,26 +292,13 @@ document.addEventListener('DOMContentLoaded', () => {
         buttonElement.querySelector('i').className = 'bi bi-arrow-repeat spinner-grow spinner-grow-sm'; // Loading indicator
         
         try {
-            // Format the endpoint URL
-            const url = `${API_CONFIG.BASE_URL}/api/agents/${agentId}/status`;
-            console.log(`Updating agent status: ${url}`, { status: newStatus });
-            
-            // Enhanced request with proper CORS headers
-            const response = await fetch(url, {
+            const response = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.AGENTS}/${agentId}`, {
+                ...defaultFetchOptions,
                 method: 'PUT',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                },
-                body: JSON.stringify({ status: newStatus }),
-                credentials: 'same-origin'  // Include credentials to handle CORS issues
+                body: JSON.stringify({ status: newStatus })
             });
             
-            if (response.ok) {
-                console.log(`Successfully updated agent ${agentId} status to ${newStatus}`);
-                // Refresh agent list smoothly
-                fetchAgents(); 
-            } else {
+            if (!response.ok) {
                 let errorMessage = '';
                 try {
                     const errorData = await response.json();
@@ -323,9 +314,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 buttonElement.disabled = false;
                 buttonElement.querySelector('i').className = originalIcon;
                 buttonElement.innerHTML = `<i class="${originalIcon}"></i> ${originalText}`;
+                return;
             }
+
+            console.log(`Successfully updated agent ${agentId} status to ${newStatus}`);
+            // Refresh agent list smoothly
+            fetchAgents();
         } catch (error) {
-            console.error('Error updating agent status:', error);
+            console.error('Failed to update agent status:', error);
             showError(`agent-list`, `Network error updating agent status: ${error.message}`);
             
             // Reset button on failure
@@ -362,7 +358,7 @@ document.addEventListener('DOMContentLoaded', () => {
         showLoading(toolListElement);
         availableToolsCountElement.textContent = '...';
         try {
-            const response = await fetch(`${API_CONFIG.BASE_URL}/api/tools`, {
+            const response = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.TOOLS}`, {
                 ...defaultFetchOptions,
                 method: 'GET'
             });
@@ -371,9 +367,9 @@ document.addEventListener('DOMContentLoaded', () => {
             allTools = data;
             filterAndRenderTools();
         } catch (error) {
-            console.error("Error fetching tools:", error);
+            console.error('Failed to fetch tools:', error);
+            showError('tool-list', 'Failed to load tools');
             toolListElement.innerHTML = '';
-            showError('tool-list', `Failed to load tools: ${error.message}`);
             availableToolsCountElement.textContent = 'Err';
         }
     }
@@ -426,52 +422,103 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     // Real MCP Status with API data
-    function updateRealMcpDisplay() {
-        if (!rolesCountElement || !messagesCountElement || !memoryCountElement || !contextUsageBarElement) {
-            console.warn('Required DOM elements for MCP display not found');
+    async function updateRealMcpDisplay() {
+        try {
+            const response = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.METRICS}`, {
+                ...defaultFetchOptions,
+                method: 'GET'
+            });
+            if (!response.ok) throw new Error('Failed to fetch metrics');
+            
+            const metrics = await response.json();
+            if (!metrics || !metrics.mcp) return;
+            
+            // Update MCP metrics display
+            const mcpMetrics = metrics.mcp;
+            
+            // Get DOM elements with null checks
+            const activeRolesElement = document.getElementById('active-roles');
+            const totalMessagesElement = document.getElementById('total-messages');
+            const memoryObjectsElement = document.getElementById('memory-objects');
+            const contextUsageElement = document.getElementById('context-usage');
+            
+            // Update elements if they exist
+            if (activeRolesElement) {
+                activeRolesElement.textContent = mcpMetrics.roles || '0';
+            }
+            if (totalMessagesElement) {
+                totalMessagesElement.textContent = mcpMetrics.messages || '0';
+            }
+            if (memoryObjectsElement) {
+                memoryObjectsElement.textContent = mcpMetrics.memory_objects || '0';
+            }
+            
+            // Update context usage if available
+            if (mcpMetrics.context) {
+                const usagePercent = mcpMetrics.context.usage_percentage || 0;
+                
+                if (contextUsageElement) {
+                    contextUsageElement.textContent = `${Math.round(usagePercent)}%`;
+                }
+                
+                // Update progress bar
+                const progressBar = document.getElementById('context-progress');
+                if (progressBar) {
+                    progressBar.style.width = `${usagePercent}%`;
+                    progressBar.setAttribute('aria-valuenow', usagePercent);
+                    
+                    // Update color based on usage
+                    if (usagePercent > 90) {
+                        progressBar.className = 'progress-bar bg-danger';
+                    } else if (usagePercent > 75) {
+                        progressBar.className = 'progress-bar bg-warning';
+                    } else {
+                        progressBar.className = 'progress-bar bg-success';
+                    }
+                }
+                
+                // Update chart if history data is available and chart exists
+                if (mcpMetrics.context.history && mcpMetrics.context.history.length > 0 && document.getElementById('context-history-chart')) {
+                    const historyData = mcpMetrics.context.history.map(point => ({
+                        timestamp: point.timestamp,
+                        value: (point.tokens_used / mcpMetrics.context.max_tokens) * 100
+                    }));
+                    updateContextHistoryChart(historyData);
+                }
+            }
+        } catch (error) {
+            console.error('Error updating MCP display:', error);
+            showError('mcp-metrics', `Failed to fetch metrics: ${error.message}`);
+        }
+    }
+    
+    function updateContextHistoryChart(historyData) {
+        // Update chartData with new values
+        chartData.labels = historyData.map(point => {
+            const time = point.timestamp;
+            return new Date(time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        });
+        chartData.data = historyData.map(point => point.value);
+
+        // If chart doesn't exist, initialize it
+        if (!contextHistoryChart) {
+            initContextHistoryChart();
             return;
         }
         
-        fetch(`${API_CONFIG.BASE_URL}/api/metrics`, {
-            ...defaultFetchOptions,
-            method: 'GET'
-        })
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error(`HTTP error ${response.status}`);
-                }
-                return response.json();
-            })
-            .then(data => {
-                const rolesCount = allAgents.length || 0;
-                rolesCountElement.textContent = rolesCount;
-                
-                if (messagesCountElement) messagesCountElement.textContent = data.active_sessions || 0;
-                if (memoryCountElement) memoryCountElement.textContent = data.active_agents || 0;
-                
-                const contextTotal = 4096;
-                const contextUsed = data.total_tokens || 0;
-                const usagePercent = Math.min(100, Math.round((contextUsed / contextTotal) * 100));
-                
-                contextUsageBarElement.style.width = `${usagePercent}%`;
-                contextUsageBarElement.textContent = `${usagePercent}%`;
-                contextUsageBarElement.setAttribute('aria-valuenow', usagePercent);
-                
-                if (contextUsedElement) contextUsedElement.textContent = contextUsed.toLocaleString();
-                if (contextTotalElement) contextTotalElement.textContent = contextTotal.toLocaleString();
-            })
-            .catch(error => {
-                console.error("Error fetching metrics:", error);
-                showError('mcp-metrics', `Failed to load metrics: ${error.message}`);
-            });
+        // Check if chart is still valid
+        if (!contextHistoryChart.canvas || !contextHistoryChart.canvas.parentNode) {
+            contextHistoryChart = null;
+            initContextHistoryChart();
+            return;
+        }
+        
+        // Update chart with new data
+        contextHistoryChart.data.labels = chartData.labels;
+        contextHistoryChart.data.datasets[0].data = chartData.data;
+        contextHistoryChart.update('none');
     }
     
-    // Context History Chart
-    let chartData = {
-        labels: Array.from({length: 12}, (_, i) => `${i*5}m ago`).reverse(),
-        data: Array.from({length: 12}, () => 0) // Initialize with zeros instead of random data
-    };
-
     function initContextHistoryChart() {
         const chartElement = document.getElementById('context-history-chart');
         if (!chartElement || !window.Chart) return;
@@ -487,26 +534,9 @@ document.addEventListener('DOMContentLoaded', () => {
             contextHistoryChart = null;
         }
         
-        // Attempt to fetch historical data first
-        fetch(`${API_CONFIG.BASE_URL}/api/metrics`)
-            .then(response => response.json())
-            .then(data => {
-                // Initialize with current usage
-                const contextTotal = 4096;
-                const contextUsed = data.total_tokens || 0;
-                const usagePercent = Math.min(100, Math.round((contextUsed / contextTotal) * 100));
-                
-                // Fill the initial data with the current value
-                chartData.data = Array.from({length: 12}, () => usagePercent);
-                
-                createContextChart();
-            })
-            .catch(error => {
-                console.error("Error fetching initial metrics for chart:", error);
-                createContextChart(); // Create chart anyway with empty data
-            });
+        createContextChart();
     }
-    
+
     function createContextChart() {
         const chartElement = document.getElementById('context-history-chart');
         if (!chartElement || !window.Chart) return;
@@ -515,10 +545,10 @@ document.addEventListener('DOMContentLoaded', () => {
         contextHistoryChart = new Chart(ctx, {
             type: 'line',
             data: {
-                labels: [...chartData.labels], // Create a copy to avoid reference issues
+                labels: chartData.labels,
                 datasets: [{
                     label: 'Context Usage %',
-                    data: [...chartData.data], // Create a copy of the data
+                    data: chartData.data,
                     borderColor: 'rgba(75, 192, 192, 1)',
                     backgroundColor: 'rgba(75, 192, 192, 0.2)',
                     tension: 0.4,
@@ -528,14 +558,19 @@ document.addEventListener('DOMContentLoaded', () => {
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                animation: false, // Disable animations completely
+                animation: false,
                 plugins: {
                     legend: {
                         display: false
                     },
                     tooltip: {
                         mode: 'index',
-                        intersect: false
+                        intersect: false,
+                        callbacks: {
+                            label: function(context) {
+                                return `Usage: ${Math.round(context.raw)}%`;
+                            }
+                        }
                     }
                 },
                 scales: {
@@ -547,35 +582,17 @@ document.addEventListener('DOMContentLoaded', () => {
                                 return value + '%';
                             }
                         }
+                    },
+                    x: {
+                        grid: {
+                            display: false
+                        }
                     }
                 }
             }
         });
     }
-    
-    function updateContextHistoryChart(newValue) {
-        // Update the stored data
-        chartData.data.shift();
-        chartData.data.push(newValue);
-        
-        // If chart doesn't exist, initialize it
-        if (!contextHistoryChart) {
-            initContextHistoryChart();
-            return;
-        }
-        
-        // Check if chart is still valid (canvas might have been removed from DOM)
-        if (!contextHistoryChart.canvas || !contextHistoryChart.canvas.parentNode) {
-            contextHistoryChart = null;
-            return;
-        }
-        
-        // Update chart with new data (create a copy to avoid reference issues)
-        contextHistoryChart.data.labels = [...chartData.labels];
-        contextHistoryChart.data.datasets[0].data = [...chartData.data];
-        contextHistoryChart.update('none'); // Update without animation
-    }
-    
+
     // Update the interval to be less frequent and clear it on cleanup
     let mcpUpdateInterval;
 
@@ -586,36 +603,36 @@ document.addEventListener('DOMContentLoaded', () => {
             mcpUpdateInterval = null;
         }
         
-        // Initialize chart data with zeros instead of random values
-        chartData.data = Array.from({length: 12}, () => 0);
+        // Initialize chart if it exists on the page
+        if (document.getElementById('context-history-chart')) {
+            initContextHistoryChart();
+        }
         
-        // Update immediately with real data
+        // Update immediately
         updateRealMcpDisplay();
         
-        // Set new interval at reasonable frequency
+        // Set new interval
         mcpUpdateInterval = setInterval(() => {
-            // Only update if document is visible and the chart exists
-            if (document.visibilityState === 'visible' && document.getElementById('context-history-chart')) {
+            if (document.visibilityState === 'visible') {
                 updateRealMcpDisplay();
             }
-        }, 60000); // Once per minute is plenty for a dashboard
+        }, 30000); // Update every 30 seconds
     }
 
     function cleanupCharts() {
         if (contextHistoryChart) {
-            try {
-                contextHistoryChart.destroy();
-            } catch (e) {
-                console.error("Error destroying chart:", e);
-            }
+            contextHistoryChart.destroy();
             contextHistoryChart = null;
         }
         
-        // Clear the update interval
         if (mcpUpdateInterval) {
             clearInterval(mcpUpdateInterval);
             mcpUpdateInterval = null;
         }
+        
+        // Reset chart data
+        chartData.labels = [];
+        chartData.data = [];
     }
 
     // Optimize the visibility change handler
@@ -685,7 +702,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Security Feed Functions
     async function updateSecurityFeed() {
         try {
-            const response = await fetch(`${API_CONFIG.BASE_URL}/api/security/events`, {
+            const response = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.SECURITY}`, {
                 ...defaultFetchOptions,
                 method: 'GET'
             });
@@ -694,24 +711,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error(`HTTP ${response.status}`);
             }
             
-            const data = await response.json();
-            return data.events || [];
+            return await response.json();
         } catch (error) {
             console.warn('Failed to fetch security events:', error);
-            // Return mock data for development/fallback
-            return [{
-                type: 'System Status',
-                timestamp: new Date().toISOString(),
-                description: 'Security feed unavailable. Using offline mode.',
-                ip: 'localhost'
-            }];
+            return [];
         }
     }
 
     // Check backend connectivity before making API calls
     async function checkBackendConnectivity() {
         try {
-            const response = await fetch(`${API_CONFIG.BASE_URL}/api/health`, {
+            const response = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.HEALTH}`, {
                 ...defaultFetchOptions,
                 method: 'GET'
             });
@@ -721,7 +731,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             
             const data = await response.json();
-            if (data.status === 'ok') {
+            if (data.status === 'healthy') {
                 console.log('Backend connectivity check passed');
                 return true;
             }
