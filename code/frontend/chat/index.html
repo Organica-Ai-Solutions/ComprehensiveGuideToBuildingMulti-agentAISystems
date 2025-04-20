@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multi-Agent Chat</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="css/chat.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container-fluid p-0">
+        <div class="row g-0">
+            <!-- Main Chat Area -->
+            <div class="col">
+                <div class="chat-container">
+                    <!-- Chat Header -->
+                    <div class="chat-header">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div class="d-flex align-items-center gap-3">
+                                <select id="agentSelect" class="form-select agent-select">
+                                    <option value="loading">Loading agents...</option>
+                                </select>
+                                <div class="btn-group">
+                                    <button class="btn btn-outline-secondary btn-sm" id="toggleContext">
+                                        <i class="bi bi-layout-sidebar-reverse"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="badge bg-success" id="connectionStatus">
+                                    <i class="bi bi-circle-fill"></i> Connected
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Messages Container -->
+                    <div class="messages-container" id="messagesContainer">
+                        <!-- Welcome Message -->
+                        <div class="message agent-message">
+                            <div class="message-header">
+                                <div class="message-avatar">
+                                    <i class="bi bi-robot"></i>
+                                </div>
+                                <strong>AI Assistant</strong>
+                            </div>
+                            <div class="message-content">
+                                👋 Hello! I'm your AI assistant. I can help you with:
+                                <ul>
+                                    <li>Writing and reviewing code</li>
+                                    <li>Explaining complex concepts</li>
+                                    <li>Solving technical problems</li>
+                                    <li>Answering questions about development</li>
+                                </ul>
+                                How can I assist you today?
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Typing Indicator -->
+                    <div id="typingIndicator" class="typing" style="display: none;">
+                        <div class="dot"></div>
+                        <div class="dot"></div>
+                        <div class="dot"></div>
+                    </div>
+
+                    <!-- Chat Input Area -->
+                    <div class="chat-input-wrapper">
+                        <div class="chat-tools">
+                            <button class="tool-button" id="uploadFile">
+                                <i class="bi bi-paperclip"></i>
+                                <span class="tool-tooltip">Attach Files</span>
+                            </button>
+                            <div class="vr"></div>
+                            <button class="tool-button" data-tool="search">
+                                <i class="bi bi-search"></i>
+                                <span class="tool-tooltip">Search Knowledge Base</span>
+                            </button>
+                            <button class="tool-button" data-tool="code">
+                                <i class="bi bi-code-slash"></i>
+                                <span class="tool-tooltip">Code Assistant</span>
+                            </button>
+                            <button class="tool-button" data-tool="image">
+                                <i class="bi bi-image"></i>
+                                <span class="tool-tooltip">Image Generation</span>
+                            </button>
+                        </div>
+                        <div class="input-group">
+                            <textarea id="messageInput" class="form-control" 
+                                    placeholder="Type your message..." 
+                                    rows="1"></textarea>
+                            <button class="btn btn-primary" id="sendMessage">
+                                <i class="bi bi-send"></i>
+                            </button>
+                        </div>
+                        <div id="filePreview" class="file-preview"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Context Panel -->
+            <div class="col-auto">
+                <div class="context-panel h-100" id="contextPanel">
+                    <div class="d-flex justify-content-between align-items-center p-3 border-bottom">
+                        <h6 class="mb-0">Context & Information</h6>
+                    </div>
+                    <div class="reasoning-steps" id="reasoningSteps">
+                        <div class="placeholder text-muted text-center p-3">
+                            <i class="bi bi-diagram-2 fs-4"></i>
+                            <p class="mt-2 mb-0 small">Reasoning steps will appear here.</p>
+                        </div>
+                    </div>
+                    <div class="border-top"></div>
+                    <div class="tool-usage" id="toolUsage">
+                        <div class="placeholder text-muted text-center p-3">
+                            <i class="bi bi-tools fs-4"></i>
+                            <p class="mt-2 mb-0 small">Tool usage will be shown here.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hidden File Input -->
+    <input type="file" id="fileInput" multiple style="display: none;">
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="../js/base.js"></script>
+    <script src="js/chat.js"></script>
+</body>
+</html> 

@@ -1,5 +1,144 @@
 # Chapter 1: Introduction to Multi-Agent AI Systems
 
+## System Overview
+
+This guide presents a comprehensive approach to building multi-agent AI systems, combining theoretical foundations with practical implementation. The system architecture is designed to be modular, scalable, and secure, with clear separation of concerns between different components.
+
+## System Architecture
+
+```mermaid
+graph TB
+    subgraph Frontend
+        UI[User Interface]
+        WS[WebSocket Client]
+        Metrics[Metrics Dashboard]
+    end
+
+    subgraph Backend
+        API[FastAPI Server]
+        AgentMgr[Agent Manager]
+        Tools[Tool Registry]
+        subgraph Agents
+            RA[Research Agent]
+            CA[Coder Agent]
+            GA[General Agent]
+        end
+    end
+
+    subgraph MCP[Master Control Program]
+        MServer[MCP Server]
+        MClient[MCP Client]
+        TaskQ[Task Queue]
+    end
+
+    UI --> WS
+    UI --> API
+    WS --> MServer
+    API --> AgentMgr
+    AgentMgr --> Agents
+    Agents --> Tools
+    MServer --> TaskQ
+    TaskQ --> MClient
+    MClient --> Agents
+    Agents --> Metrics
+```
+
+### Key Components
+
+1. **Frontend Layer**
+   - Modern web interface for user interactions
+   - Real-time WebSocket communication
+   - Metrics visualization dashboard
+   - Responsive design for multiple devices
+
+2. **Backend Layer**
+   - FastAPI server for REST endpoints
+   - Agent Manager for orchestration
+   - Tool Registry for agent capabilities
+   - Specialized agents for different tasks
+
+3. **Master Control Program (MCP)**
+   - Central task coordination
+   - Load balancing
+   - System monitoring
+   - Resource management
+
+## System Startup Process
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Script as start_system.sh
+    participant MCP as MCP Server
+    participant Client as MCP Client
+    participant Backend
+    participant Frontend
+
+    User->>Script: Execute start_system.sh
+    Script->>MCP: Start MCP Server
+    Note over MCP: Initialize Task Queue
+    Script->>Client: Start MCP Client
+    Note over Client: Connect to MCP Server
+    Script->>Backend: Start Backend Server
+    Note over Backend: Initialize Agents & Tools
+    Script->>Frontend: Start Frontend Server
+    Note over Frontend: Setup UI & WebSocket
+    Script->>User: Display Access URLs
+    Note over Script: Create stop_system.sh
+    Note over Script: Begin log monitoring
+```
+
+## Component Communication
+
+```mermaid
+flowchart LR
+    subgraph User Interface
+        Chat[Chat Interface]
+        Status[Status Display]
+    end
+
+    subgraph Agent System
+        RA[Research Agent]
+        CA[Coder Agent]
+        Tools[Tool Registry]
+    end
+
+    subgraph Processing
+        Val[Input Validation]
+        Safety[Safety Checks]
+        History[Chat History]
+    end
+
+    Chat -->|User Input| Val
+    Val -->|Validated| Safety
+    Safety -->|Safe Input| Agent System
+    Agent System -->|Using| Tools
+    Agent System -->|Response| History
+    History -->|Update| Status
+    Status -->|Display| Chat
+```
+
+### Communication Flow
+
+1. **User Input Processing**
+   - Input validation and sanitization
+   - Safety checks and content filtering
+   - History management and context tracking
+
+2. **Agent Processing**
+   - Task distribution to specialized agents
+   - Tool access and execution
+   - Response generation and validation
+
+3. **Output Handling**
+   - Response formatting
+   - History updates
+   - UI state management
+
+## Getting Started
+
+The system can be started using the provided `start_system.sh` script, which initializes all components in the correct order and establishes necessary connections. The script also creates a corresponding `stop_system.sh` for graceful system shutdown.
+
 ## Introduction
 
 Multi-agent AI systems represent a revolutionary paradigm in artificial intelligence, combining the cognitive capabilities of large language models with specialized tools and coordination mechanisms to create powerful, autonomous applications capable of solving complex problems. This chapter introduces the foundational concepts necessary to understand these systems and their potential.

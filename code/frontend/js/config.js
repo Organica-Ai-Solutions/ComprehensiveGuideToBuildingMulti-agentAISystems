@@ -1,36 +1,56 @@
 // System Configuration
 
 // API Configuration
-window.API_CONFIG = {
-    BASE_URL: 'http://localhost:8000/api',
+const config = {
+    apiBaseUrl: 'http://127.0.0.1:5000',
     ENDPOINTS: {
-        METRICS: '/metrics',
-        TASKS: '/tasks',
-        AGENTS: '/agents',
-        TOOLS: '/tools',
-        SECURITY: '/security',
-        TOKENS: '/tokens'
+        METRICS: '/api/metrics',
+        TASKS: '/api/tasks',
+        AGENTS: '/api/agents',
+        TOOLS: '/api/tools',
+        SECURITY: '/api/security/events',
+        HEALTH: '/api/health'
+    },
+    HEADERS: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
     },
     REFRESH_INTERVALS: {
-        METRICS: 60000,  // 1 minute
-        TASKS: 30000,    // 30 seconds
-        SECURITY: 45000, // 45 seconds
-        TOKENS: 60000    // 1 minute
+        METRICS: 30000,    // 30 seconds
+        TASKS: 30000,      // 30 seconds
+        SECURITY: 30000    // 30 seconds
     }
 };
 
 // WebSocket Configuration
-const WS_CONFIG = {
-    BASE_URL: 'ws://localhost:8000',
+window.WS_CONFIG = {
+    BASE_URL: 'ws://127.0.0.1:5000',
     ENDPOINTS: {
-        AGENT_CHAT: '/ws'
+        AGENT_CHAT: '/ws/chat',
+        METRICS: '/ws/metrics'
     }
 };
 
 // Theme Configuration
-const THEME_CONFIG = {
-    STORAGE_KEY: 'preferred_theme',
-    DEFAULT: 'light'
+window.THEME_CONFIG = {
+    STORAGE_KEY: 'theme',
+    DEFAULT: 'light',
+    COLORS: {
+        light: {
+            background: '#ffffff',
+            text: '#212529',
+            border: '#dee2e6',
+            primary: '#0d6efd',
+            secondary: '#6c757d'
+        },
+        dark: {
+            background: '#212529',
+            text: '#f8f9fa',
+            border: '#495057',
+            primary: '#0d6efd',
+            secondary: '#6c757d'
+        }
+    }
 };
 
 // Agent Configuration
@@ -137,6 +157,20 @@ window.MODELS = [
         description: 'Claude 3 Sonnet balances intelligence and speed, offering strong performance at an accessible price point.',
         parameters: '~1 trillion',
         context_window: '100,000'
+    },
+    {
+        id: 'gemini-pro',
+        name: 'Gemini Pro',
+        description: 'Google\'s most capable model, optimized for enterprise-grade performance and reliability.',
+        parameters: '~1.5 trillion',
+        context_window: '100,000'
+    },
+    {
+        id: 'gemini-ultra',
+        name: 'Gemini Ultra',
+        description: 'The most advanced version of Gemini, designed for highly complex tasks.',
+        parameters: '~2 trillion',
+        context_window: '128,000'
     }
 ];
 
@@ -189,28 +223,6 @@ window.CHART_CONFIG = {
             legend: {
                 position: 'bottom'
             }
-        }
-    }
-};
-
-// Theme Configuration
-window.THEME_COLORS = {
-    light: {
-        background: '#ffffff',
-        text: '#212529',
-        border: '#dee2e6',
-        chart: {
-            gridLines: '#e9ecef',
-            text: '#495057'
-        }
-    },
-    dark: {
-        background: '#212529',
-        text: '#f8f9fa',
-        border: '#495057',
-        chart: {
-            gridLines: '#343a40',
-            text: '#adb5bd'
         }
     }
 };

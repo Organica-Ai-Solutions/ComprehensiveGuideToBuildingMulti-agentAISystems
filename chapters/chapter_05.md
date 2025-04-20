@@ -572,4 +572,122 @@ The challenge of maintaining state in serverless environments can be addressed t
 
 As you move your agent system to production, focus on creating architectures that are resilient, observable, and cost-effective. By following the patterns and best practices outlined in this chapter, you can successfully deploy multi-agent AI systems that scale reliably and provide value to users.
 
-*Note: Citation numbers [X] refer to the "Obras citadas" section in the bibliography.* 
+*Note: Citation numbers [X] refer to the "Obras citadas" section in the bibliography.*
+
+## Model Context Protocol Integration
+
+The system implements the Model Context Protocol (MCP) to provide standardized access to tools and data sources. This implementation consists of two main components:
+
+### MCP Server
+
+The MCP server (`code/mcp_server/server.py`) provides:
+
+1. Tool Registration and Management
+   ```python
+   @mcp.tool()
+   async def get_weather_alerts(state: str) -> str:
+       """Get active weather alerts for a specific US state."""
+       # Implementation
+   ```
+
+2. Resource Management
+   ```python
+   @mcp.resource("context://summary")
+   def get_project_summary() -> str:
+       """Returns a simple text summary of the project state."""
+       # Implementation
+   ```
+
+3. Prompt Templates
+   ```python
+   @mcp.prompt()
+   def ask_tool_recommendation(task: str) -> str:
+       """Generates a prompt for tool recommendations."""
+       # Implementation
+   ```
+
+### MCP Client
+
+The MCP client (`code/mcp_client/client.py`) handles:
+
+1. Server Connection
+   ```python
+   async with stdio_client(server_params) as (read_stream, write_stream):
+       async with ClientSession(read_stream, write_stream) as session:
+           # Client operations
+   ```
+
+2. Tool Invocation
+   ```python
+   result = await session.call_tool("tool_name", arguments={...})
+   ```
+
+3. Resource Access
+   ```python
+   content, mime_type = await session.read_resource("resource_uri")
+   ```
+
+## System Startup and Management
+
+The system uses a coordinated startup process to ensure all components are running in the correct order:
+
+### Component Startup Sequence
+
+1. MCP Server
+   - Initializes tool registries
+   - Sets up resource handlers
+   - Prepares prompt templates
+
+2. MCP Client
+   - Connects to MCP server
+   - Validates available tools
+   - Establishes communication channels
+
+3. Backend Server
+   - Starts FastAPI application
+   - Initializes WebSocket handlers
+   - Sets up agent management
+
+4. Frontend Server
+   - Serves web interface
+   - Establishes API connections
+   - Manages user interactions
+
+### Startup Script
+
+The `start_system.sh` script automates the startup process:
+
+```bash
+# 1. Start MCP Server
+python code/mcp_server/server.py &
+
+# 2. Start MCP Client
+python code/mcp_client/client.py &
+
+# 3. Start Backend
+cd code/backend
+python main.py &
+
+# 4. Start Frontend
+cd code/frontend
+npm start &
+```
+
+### Log Management
+
+Each component writes to its own log file:
+- `logs/mcp_server.log`
+- `logs/mcp_client.log`
+- `logs/backend.log`
+- `logs/frontend.log`
+
+### System Shutdown
+
+The `stop_system.sh` script ensures graceful shutdown:
+```bash
+# Stop all components
+kill $(ps aux | grep '[p]ython code/mcp_server/server.py' | awk '{print $2}')
+kill $(ps aux | grep '[p]ython code/mcp_client/client.py' | awk '{print $2}')
+kill $(ps aux | grep '[p]ython code/backend/main.py' | awk '{print $2}')
+kill $(ps aux | grep '[n]pm start' | awk '{print $2}')
+``` 

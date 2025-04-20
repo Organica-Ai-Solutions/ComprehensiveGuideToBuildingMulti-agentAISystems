@@ -6,6 +6,32 @@ This repository contains a non-monolithic architecture for a multi-agent AI syst
 
 The system follows a microservices architecture with the following components:
 
+### Core Components
+
+1. **MCP (Model Context Protocol) Server** (`code/mcp_server`)
+   - Implements the Model Context Protocol specification
+   - Provides standardized access to tools and data sources
+   - Handles tool registration and execution
+   - Manages resources and prompt templates
+
+2. **MCP Client** (`code/mcp_client`)
+   - Connects to the MCP server
+   - Facilitates communication between agents and tools
+   - Handles session management and tool invocation
+   - Provides error handling and retry logic
+
+3. **Backend Server** (`code/backend`)
+   - Implements the main application logic
+   - Manages agent states and conversations
+   - Handles WebSocket connections
+   - Processes agent requests and responses
+
+4. **Frontend Server** (`code/frontend`)
+   - Serves the web interface
+   - Manages user interactions
+   - Displays chat interface and dashboard
+   - Handles real-time updates
+
 ### Backend Services
 
 1. **API Gateway** (`services/api_gateway`)
@@ -76,12 +102,18 @@ The system follows a microservices architecture with the following components:
 ### Installation
 
 1. Clone the repository
+
 2. Install backend dependencies:
    ```bash
-   # Install dependencies for each service
-   cd code/services/api_gateway
+   # Install dependencies for each component
+   cd code/backend
    pip install -r requirements.txt
-   # Repeat for other services
+   
+   cd ../mcp_server
+   pip install -r requirements.txt
+   
+   cd ../mcp_client
+   pip install -r requirements.txt
    ```
 
 3. Install frontend dependencies:
@@ -92,41 +124,57 @@ The system follows a microservices architecture with the following components:
 
 ### Environment Setup
 
-Create `.env` files in each service directory with the appropriate configuration. Examples:
-
-- `api_gateway/.env`:
-  ```
-  API_GATEWAY_KEY=your_api_key
-  PORT=8000
-  ```
-
-- `llm_proxy/.env`:
-  ```
-  OPENAI_API_KEY=your_openai_key
-  ANTHROPIC_API_KEY=your_anthropic_key
-  ```
-
-### Running the Services
-
-1. Start the API Gateway:
-   ```bash
-   cd code/services/api_gateway
-   uvicorn main:app --reload --port 8000
+1. Create `.env` files in the backend directory:
+   ```
+   OPENAI_API_KEY=your_openai_key
+   API_KEY=your_api_key
    ```
 
-2. Start the Agent Orchestration service:
+2. Configure the frontend:
+   - Update `code/frontend/config.js` with appropriate API endpoints
+   - Set up any required environment variables
+
+### Running the System
+
+The system includes a convenient startup script that launches all components in the correct order:
+
+1. Start all components:
    ```bash
-   cd code/services/agent_orchestration
-   uvicorn main:app --reload --port 8001
+   ./start_system.sh
+   ```
+   This will start:
+   - MCP Server
+   - MCP Client
+   - Backend Server
+   - Frontend Server
+
+2. Monitor logs:
+   ```bash
+   # View individual component logs
+   tail -f logs/mcp_server.log
+   tail -f logs/mcp_client.log
+   tail -f logs/backend.log
+   tail -f logs/frontend.log
    ```
 
-3. Start other services similarly (adjust ports as defined in the API Gateway configuration)
-
-4. Start the frontend:
+3. Stop all components:
    ```bash
-   cd code/frontend
-   npm run dev
+   ./stop_system.sh
    ```
+
+4. Access the application:
+   - Frontend: http://localhost:3000
+   - Backend API: http://localhost:8000
+
+### Troubleshooting
+
+If you encounter issues:
+
+1. Check component logs in the `logs/` directory
+2. Ensure all required environment variables are set
+3. Verify all ports are available (3000 for frontend, 8000 for backend)
+4. Make sure all dependencies are installed
+5. Check if the MCP server and client are running properly
 
 ## Development Guidelines
 
@@ -212,4 +260,31 @@ Please follow the established code style and patterns when contributing to the p
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details. 
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Model Context Protocol (MCP)
+
+The system implements the Model Context Protocol, providing:
+
+1. **Standardized Tool Access**
+   - Weather alerts and forecasts
+   - Browser tools
+   - OS tools
+   - Custom tool integration capability
+
+2. **Resource Management**
+   - Project context and summaries
+   - File access and manipulation
+   - State management
+
+3. **Prompt Templates**
+   - Tool recommendations
+   - Task analysis
+   - Custom prompt creation
+
+### Adding New MCP Tools
+
+1. Create a new tool in `code/mcp_server/tools/`
+2. Register the tool in `server.py`
+3. Implement the tool interface
+4. Update the client to use the new tool 

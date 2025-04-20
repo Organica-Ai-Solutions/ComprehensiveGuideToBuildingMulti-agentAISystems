@@ -24,8 +24,8 @@ class Navigation {
                     <span class="nav-section-title" id="sectionTitle">Dashboard</span>
                 </div>
 
-                <!-- Center section -->
-                <div class="navbar-nav mx-auto d-none d-lg-flex">
+                <!-- Center section - Ensure always displayed -->
+                <div class="navbar-nav mx-auto d-flex">
                     <a class="nav-link" href="/dashboard/dashboard.html" data-section="Dashboard">
                         <i class="bi bi-speedometer2"></i>
                         <span>Dashboard</span>
@@ -52,7 +52,10 @@ class Navigation {
                             <li><h6 class="dropdown-header">Select Model</h6></li>
                             <li><a class="dropdown-item active" href="#"><i class="bi bi-cpu"></i> GPT-4</a></li>
                             <li><a class="dropdown-item" href="#"><i class="bi bi-cpu"></i> GPT-3.5</a></li>
-                            <li><a class="dropdown-item" href="#"><i class="bi bi-cpu"></i> Claude 2</a></li>
+                            <li><a class="dropdown-item" href="#"><i class="bi bi-cpu"></i> Claude 3 Opus</a></li>
+                            <li><a class="dropdown-item" href="#"><i class="bi bi-cpu"></i> Claude 3 Sonnet</a></li>
+                            <li><a class="dropdown-item" href="#"><i class="bi bi-cpu"></i> Gemini Pro</a></li>
+                            <li><a class="dropdown-item" href="#"><i class="bi bi-cpu"></i> Gemini Ultra</a></li>
                         </ul>
                     </div>
 
@@ -122,13 +125,27 @@ class Navigation {
         const navLinks = document.querySelectorAll('.nav-link');
         const sectionTitle = document.getElementById('sectionTitle');
 
+        if (!currentPath || !navLinks.length) {
+            console.warn('Navigation: Unable to update active section - missing path or navigation links');
+            return;
+        }
+
+        let activeSection = '';
         navLinks.forEach(link => {
-            const isActive = link.getAttribute('href').includes(currentPath);
+            if (!link || !link.getAttribute('href')) return;
+            
+            const href = link.getAttribute('href');
+            const isActive = currentPath.includes(href.split('/').pop());
             link.classList.toggle('active', isActive);
-            if (isActive && sectionTitle) {
-                sectionTitle.textContent = link.getAttribute('data-section');
+            
+            if (isActive) {
+                activeSection = link.getAttribute('data-section') || '';
             }
         });
+
+        if (sectionTitle && activeSection) {
+            sectionTitle.textContent = activeSection;
+        }
     }
 
     toggleTheme() {

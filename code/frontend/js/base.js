@@ -4,7 +4,7 @@
 const protocol = window.location.protocol === 'https:' ? 'https' : 'http';
 const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
 const hostname = '127.0.0.1';  // Force IPv4 localhost
-const port = '8000'; // Backend server port
+const port = '5000'; // Backend server port
 
 // API Configuration
 const API_CONFIG = {
@@ -15,54 +15,101 @@ const API_CONFIG = {
         MESSAGES: '/api/messages',
         TOOLS: '/api/tools',
         METRICS: '/api/metrics',
-        HEALTH: '/api/health'
+        HEALTH: '/api/health',
+        SECURITY: '/api/security/events',
+        CHAT: '/api/chat'  // Add chat endpoint
     },
     VERSION: '1.0.0'
 };
 
-// Default fetch options
+// Default fetch options with proper CORS settings
 const defaultFetchOptions = {
     mode: 'cors',
     cache: 'no-cache',
+    credentials: 'include',  // Enable credentials for CORS
     headers: {
         'Accept': 'application/json',
         'Content-Type': 'application/json'
-    },
-    credentials: 'include'
+    }
 };
 
 // Make configurations and utilities globally available
 window.API_CONFIG = API_CONFIG;
 window.defaultFetchOptions = defaultFetchOptions;
 
-// Generic API call function with retry logic
+// Generic API call function with enhanced error handling
 async function apiCall(endpoint, options = {}) {
     const maxRetries = 3;
     const baseDelay = 1000; // 1 second
 
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-        try {
-            const response = await fetch(`${window.API_CONFIG.BASE_URL}${endpoint}`, {
-                ...defaultFetchOptions,
-                ...options
-            });
+    if (!endpoint) {
+        console.error("apiCall Error: Endpoint is required.");
+        throw new Error('Endpoint is required for API calls');
+    }
 
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+    const normalizedEndpoint = endpoint.startsWith('/') ? endpoint : '/' + endpoint;
+    const url = `${window.API_CONFIG.BASE_URL}${normalizedEndpoint}`;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        console.log(`apiCall: Attempt ${attempt} for ${normalizedEndpoint}`);
+        try {
+            // Merge options with defaults
+            const fetchOptions = {
+                ...defaultFetchOptions,
+                ...options,
+                headers: {
+                    ...defaultFetchOptions.headers,
+                    ...(options.headers || {})
+                }
+            };
+
+            console.log(`apiCall: Fetching URL: ${url}`);
+            
+            const response = await fetch(url, fetchOptions);
+            console.log(`apiCall: Received response for ${normalizedEndpoint}. Status: ${response.status}, OK: ${response.ok}`);
+
+            // Check for non-JSON response
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                const text = await response.text();
+                console.error(`apiCall: Received non-JSON response: ${text}`);
+                throw new APIError(
+                    'Server returned invalid response format',
+                    response.status,
+                    normalizedEndpoint
+                );
             }
 
-            return await response.json();
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new APIError(
+                    errorData.detail || errorData.message || `HTTP error! status: ${response.status}`,
+                    response.status,
+                    normalizedEndpoint
+                );
+            }
+
+            const data = await response.json();
+            console.log(`apiCall: Successfully parsed JSON response for ${normalizedEndpoint}`);
+            return { data };
+
         } catch (error) {
-            console.error(`API call attempt ${attempt} failed:`, error);
+            console.error(`apiCall: Attempt ${attempt} failed for ${normalizedEndpoint}. Error:`, error);
+
+            if (error instanceof APIError) {
+                if (error.status >= 400 && error.status < 500) {
+                    throw error; // Don't retry client errors
+                }
+            }
 
             if (attempt === maxRetries) {
+                console.error(`apiCall: Max retries (${maxRetries}) reached for ${normalizedEndpoint}`);
                 throw error;
             }
 
-            // Exponential backoff
-            await new Promise(resolve => 
-                setTimeout(resolve, baseDelay * Math.pow(2, attempt - 1))
-            );
+            const delay = baseDelay * Math.pow(2, attempt - 1);
+            console.log(`apiCall: Retrying ${normalizedEndpoint} in ${delay}ms...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
         }
     }
 }
@@ -133,11 +180,14 @@ const EventBus = {
     }
 };
 
-// Theme configuration
-const THEME_CONFIG = {
-    STORAGE_KEY: 'theme',
-    DEFAULT: 'light'
-};
+// Make utilities globally available
+window.showToast = showToast;
+window.apiCall = apiCall;
+window.generateId = generateId;
+window.formatTimestamp = formatTimestamp;
+window.sanitizeInput = sanitizeInput;
+window.EventTypes = EventTypes;
+window.EventBus = EventBus;
 
 // Utility functions for date formatting
 function formatDate(dateString) {
@@ -158,71 +208,61 @@ function formatNumber(number) {
     }).format(number);
 }
 
-// Utility function for making API requests
-async function makeApiRequest(endpoint, options = {}) {
-    try {
-        const response = await fetch(`${API_CONFIG.BASE_URL}${endpoint}`, {
-            ...options,
-            headers: {
-                'Content-Type': 'application/json',
-                ...options.headers
-            }
-        });
-
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const data = await response.json();
-        return data;
-    } catch (error) {
-        console.error('API request failed:', error);
-        return { success: false, error: error.message };
-    }
+// Utility function for showing alerts
+function showToast(message, type = 'error') {
+    const toastContainer = document.getElementById('toast-container') || createToastContainer();
+    
+    const toast = document.createElement('div');
+    toast.className = `toast align-items-center text-white bg-${type} border-0`;
+    toast.setAttribute('role', 'alert');
+    toast.setAttribute('aria-live', 'assertive');
+    toast.setAttribute('aria-atomic', 'true');
+    
+    toast.innerHTML = `
+        <div class="d-flex">
+            <div class="toast-body">
+                ${message}
+            </div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+    `;
+    
+    toastContainer.appendChild(toast);
+    const bsToast = new bootstrap.Toast(toast);
+    bsToast.show();
+    
+    // Remove toast after it's hidden
+    toast.addEventListener('hidden.bs.toast', () => toast.remove());
 }
 
-// Utility function for showing alerts
-function showAlert(message, type = 'danger') {
-    const alertContainer = document.getElementById('alert-container');
-    if (!alertContainer) return;
-
-    const alert = document.createElement('div');
-    alert.className = `alert alert-${type} alert-dismissible fade show`;
-    alert.role = 'alert';
-    alert.innerHTML = `
-        ${message}
-        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-    `;
-
-    alertContainer.appendChild(alert);
-
-    // Auto-dismiss after 5 seconds
-    setTimeout(() => {
-        alert.classList.remove('show');
-        setTimeout(() => alert.remove(), 150);
-    }, 5000);
+function createToastContainer() {
+    const container = document.createElement('div');
+    container.id = 'toast-container';
+    container.className = 'toast-container position-fixed top-0 end-0 p-3';
+    document.body.appendChild(container);
+    return container;
 }
 
 // Utility function for handling API errors
 function handleApiError(error, context = '') {
     console.error(`${context} Error:`, error);
-    showAlert(`Failed to ${context.toLowerCase()}: ${error.message}`);
+    showToast(`Failed to ${context.toLowerCase()}: ${error.message}`);
 }
 
 // Theme management
 const ThemeManager = {
     init() {
-        const savedTheme = localStorage.getItem(THEME_CONFIG.STORAGE_KEY) || THEME_CONFIG.DEFAULT;
+        const savedTheme = localStorage.getItem(window.THEME_CONFIG.STORAGE_KEY) || window.THEME_CONFIG.DEFAULT;
         this.setTheme(savedTheme);
     },
 
     setTheme(theme) {
         document.documentElement.setAttribute('data-bs-theme', theme);
-        localStorage.setItem(THEME_CONFIG.STORAGE_KEY, theme);
+        localStorage.setItem(window.THEME_CONFIG.STORAGE_KEY, theme);
     },
 
     toggleTheme() {
-        const currentTheme = document.documentElement.getAttribute('data-bs-theme');
+            const currentTheme = document.documentElement.getAttribute('data-bs-theme');
         const newTheme = currentTheme === 'light' ? 'dark' : 'light';
         this.setTheme(newTheme);
         return newTheme;
@@ -240,7 +280,10 @@ window.APIError = APIError;
 window.EventTypes = EventTypes;
 window.EventBus = EventBus;
 window.defaultFetchOptions = defaultFetchOptions;
+window.showToast = showToast;
 window.apiCall = apiCall;
 window.generateId = generateId;
 window.formatTimestamp = formatTimestamp;
-window.sanitizeInput = sanitizeInput; 
+window.sanitizeInput = sanitizeInput;
+
+const API_BASE_URL = 'http://127.0.0.1:5000'; 

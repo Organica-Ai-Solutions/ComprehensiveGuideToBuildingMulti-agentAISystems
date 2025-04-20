@@ -58,20 +58,32 @@
                 </div>
             </div>
 
-            <div class="chat-input-container">
-                <div class="file-preview" id="filePreview" style="display: none;">
-                    <!-- File previews will be added here -->
+            <div class="chat-input-area">
+                <!-- Agent Selector -->
+                <div class="agent-selector mb-2">
+                    <label for="agentSelect" class="form-label visually-hidden">Select Agent</label>
+                    <select class="form-select form-select-sm" id="agentSelect" aria-label="Select Agent">
+                        <!-- Options will be populated by JS -->
+                        <option selected>Default Agent</option> 
+                    </select>
                 </div>
-                <div class="input-group">
-                    <button class="btn btn-icon" id="uploadFile" title="Attach file">
-                        <i class="bi bi-paperclip"></i>
-                    </button>
-                    <textarea class="form-control" id="messageInput" rows="1" 
-                              placeholder="Type your message..." 
-                              aria-label="Message input"></textarea>
-                    <button class="btn btn-primary" id="sendMessage" title="Send message">
-                        <i class="bi bi-send"></i>
-                    </button>
+                
+                <!-- File Input (Hidden) -->
+                <input type="file" id="fileInput" multiple hidden accept=".txt,.js,.py,.html,.css,.json,.md,image/*"> 
+
+                <div class="chat-input-container">
+                    <div class="file-preview" id="filePreview" style="display: none;"></div>
+                    <div class="input-group">
+                        <button class="btn btn-icon" id="uploadFile" title="Attach file">
+                            <i class="bi bi-paperclip"></i>
+                        </button>
+                        <textarea class="form-control" id="messageInput" rows="1" 
+                                  placeholder="Type your message..." 
+                                  aria-label="Message input"></textarea>
+                        <button class="btn btn-primary" id="sendMessage" title="Send message">
+                            <i class="bi bi-send"></i>
+                        </button>
+                    </div>
                 </div>
             </div>
         </main>
@@ -128,13 +140,12 @@
         </div>
     </template>
 
+    <!-- File Preview Template -->
     <template id="filePreviewTemplate">
-        <div class="file-preview-item">
-            <i class="bi bi-file-earmark-text"></i>
-            <span class="filename"><!-- Filename will be inserted here --></span>
-            <button class="btn btn-icon btn-sm remove-file">
-                <i class="bi bi-x"></i>
-            </button>
+        <div class="file-preview-item d-flex align-items-center border rounded p-1 me-2 mb-1 bg-light small">
+            <i class="bi bi-file-earmark-text me-1"></i>
+            <span class="filename me-auto"></span>
+            <button type="button" class="btn-close btn-sm remove-file" aria-label="Remove file"></button>
         </div>
     </template>
 </body>

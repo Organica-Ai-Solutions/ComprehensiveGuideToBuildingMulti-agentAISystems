@@ -14,6 +14,100 @@ A comprehensive guide and implementation for building multi-agent AI systems. Th
 └── README.md          # This file
 ```
 
+## System Architecture
+
+```mermaid
+graph TB
+    subgraph Frontend
+        UI[User Interface]
+        WS[WebSocket Client]
+        Metrics[Metrics Dashboard]
+    end
+
+    subgraph Backend
+        API[FastAPI Server]
+        AgentMgr[Agent Manager]
+        Tools[Tool Registry]
+        subgraph Agents
+            RA[Research Agent]
+            CA[Coder Agent]
+            GA[General Agent]
+        end
+    end
+
+    subgraph MCP[Master Control Program]
+        MServer[MCP Server]
+        MClient[MCP Client]
+        TaskQ[Task Queue]
+    end
+
+    UI --> WS
+    UI --> API
+    WS --> MServer
+    API --> AgentMgr
+    AgentMgr --> Agents
+    Agents --> Tools
+    MServer --> TaskQ
+    TaskQ --> MClient
+    MClient --> Agents
+    Agents --> Metrics
+```
+
+## Startup Process
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Script as start_system.sh
+    participant MCP as MCP Server
+    participant Client as MCP Client
+    participant Backend
+    participant Frontend
+
+    User->>Script: Execute start_system.sh
+    Script->>MCP: Start MCP Server
+    Note over MCP: Initialize Task Queue
+    Script->>Client: Start MCP Client
+    Note over Client: Connect to MCP Server
+    Script->>Backend: Start Backend Server
+    Note over Backend: Initialize Agents & Tools
+    Script->>Frontend: Start Frontend Server
+    Note over Frontend: Setup UI & WebSocket
+    Script->>User: Display Access URLs
+    Note over Script: Create stop_system.sh
+    Note over Script: Begin log monitoring
+```
+
+## Component Communication
+
+```mermaid
+flowchart LR
+    subgraph User Interface
+        Chat[Chat Interface]
+        Status[Status Display]
+    end
+
+    subgraph Agent System
+        RA[Research Agent]
+        CA[Coder Agent]
+        Tools[Tool Registry]
+    end
+
+    subgraph Processing
+        Val[Input Validation]
+        Safety[Safety Checks]
+        History[Chat History]
+    end
+
+    Chat -->|User Input| Val
+    Val -->|Validated| Safety
+    Safety -->|Safe Input| Agent System
+    Agent System -->|Using| Tools
+    Agent System -->|Response| History
+    History -->|Update| Status
+    Status -->|Display| Chat
+```
+
 ## Backend Implementation
 
 The backend is built with FastAPI and provides a RESTful API for interacting with AI agents. It includes:

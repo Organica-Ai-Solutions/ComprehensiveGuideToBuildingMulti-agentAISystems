@@ -1,6 +1,7 @@
 // API Configuration
-export const API_CONFIG = {
-    baseUrl: 'http://localhost:8000',
+const config = {
+    API_BASE_URL: 'http://127.0.0.1:5000',
+    WS_BASE_URL: 'ws://127.0.0.1:5000',
     headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json'
@@ -13,4 +14,6 @@ export const API_CONFIG = {
         metrics: '/api/metrics',
         status: '/api/agents/{agent_id}'
     }
-}; 
+};
+
+export default config; 

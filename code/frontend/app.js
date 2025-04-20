@@ -10,7 +10,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // --- API Configuration ---
 const API_CONFIG = {
-    baseUrl: 'http://localhost:5001/api',
+    baseUrl: 'http://127.0.0.1:5000/api',
     headers: {
         'Content-Type': 'application/json',
         // Add API key if needed
@@ -460,7 +460,7 @@ function updateSystemStatus() {
     if (!statusBadge) return;
     
     // Check if backend is reachable by pinging a simple endpoint
-    fetch('http://localhost:5001/api/agents', { method: 'HEAD' })
+    fetch('http://127.0.0.1:5000/api/agents', { method: 'HEAD' })
         .then(response => {
             if (response.ok) {
                 statusBadge.className = 'badge bg-success';

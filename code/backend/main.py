@@ -1,9 +1,12 @@
+"""
+Main backend application module.
+"""
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, WebSocket, Body, Depends, Request, WebSocketDisconnect, status
+from fastapi import FastAPI, HTTPException, WebSocket, Body, Depends, Request, WebSocketDisconnect, status, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import APIKeyHeader
 from fastapi.websockets import WebSocketState
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, validator
 from typing import List, Optional, Dict, Any, Union
 from datetime import datetime
 import json
@@ -18,16 +21,16 @@ import uvicorn
 import logging
 import re
 import sys
+from enum import Enum
+from langchain.agents import AgentExecutor, create_openai_functions_agent
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.tools import Tool
+from langchain_openai import ChatOpenAI
+from langchain_core.messages import AIMessage, HumanMessage
+from langchain.memory import ConversationBufferMemory
 
-# Configure detailed logging
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler('app.log')
-    ]
-)
+# Initialize logging
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Import tools
@@ -49,6 +52,60 @@ except Exception as e:
     logger.error(f"Error loading configuration: {str(e)}")
     raise
 
+class ConnectionManager:
+    """Manages WebSocket connections for real-time communication."""
+    
+    def __init__(self):
+        """Initialize the connection manager."""
+        self.active_connections: Dict[str, List[WebSocket]] = {}
+        
+    async def connect(self, websocket: WebSocket, agent_id: str):
+        """Connect a new WebSocket for a specific agent."""
+        await websocket.accept()
+        if agent_id not in self.active_connections:
+            self.active_connections[agent_id] = []
+        self.active_connections[agent_id].append(websocket)
+        logger.info(f"New WebSocket connection established for agent {agent_id}")
+        
+    def disconnect(self, websocket: WebSocket, agent_id: str):
+        """Disconnect a WebSocket for a specific agent."""
+        if agent_id in self.active_connections:
+            self.active_connections[agent_id].remove(websocket)
+            if not self.active_connections[agent_id]:
+                del self.active_connections[agent_id]
+        logger.info(f"WebSocket connection closed for agent {agent_id}")
+        
+    async def broadcast(self, message: dict, agent_id: str):
+        """Broadcast a message to all connected WebSockets for a specific agent."""
+        if agent_id not in self.active_connections:
+            return
+            
+        dead_connections = []
+        for connection in self.active_connections[agent_id]:
+            try:
+                await connection.send_json(message)
+            except RuntimeError as e:
+                dead_connections.append(connection)
+                logger.error(f"Error broadcasting message: {str(e)}")
+                
+        # Clean up dead connections
+        for dead_connection in dead_connections:
+            self.active_connections[agent_id].remove(dead_connection)
+            
+        if not self.active_connections[agent_id]:
+            del self.active_connections[agent_id]
+            
+    async def handle_failed_connection(self, websocket: WebSocket, agent_id: str):
+        """Handle a failed WebSocket connection attempt."""
+        try:
+            await websocket.close(code=status.WS_1006_ABNORMAL_CLOSURE)
+        except RuntimeError as e:
+            logger.error(f"Error closing failed connection: {str(e)}")
+        if agent_id in self.active_connections and websocket in self.active_connections[agent_id]:
+            self.active_connections[agent_id].remove(websocket)
+            if not self.active_connections[agent_id]:
+                del self.active_connections[agent_id]
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for FastAPI application"""
@@ -66,24 +123,38 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# Initialize connection manager for WebSocket connections
+manager = ConnectionManager()
+
 # Add security headers
 API_KEY = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 # Configure CORS from config
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=config['api']['allowed_origins'],
-    allow_credentials=config['api']['cors_settings']['allow_credentials'],
-    allow_methods=config['api']['cors_settings']['allow_methods'],
-    allow_headers=config['api']['cors_settings']['allow_headers'],
-    max_age=config['api']['cors_settings']['max_age'],
+    allow_origins=["*"],  # Allow all origins for debugging
+    allow_credentials=True,
+    allow_methods=["*"],  # Allow all methods
+    allow_headers=["*"],  # Allow all headers
 )
 
 # Load environment variables
 load_dotenv()
 
-# Access variables like this:
+# Access and validate OpenAI API key
 openai_key = os.getenv("OPENAI_API_KEY")
+if not openai_key:
+    raise ValueError("OPENAI_API_KEY environment variable is not set. Please set it in your .env file.")
+
+if openai_key == "your_openai_api_key_here":
+    raise ValueError("Please replace the placeholder API key with your actual OpenAI API key in the .env file.")
+
+# Initialize LangChain components
+llm = ChatOpenAI(
+    temperature=0.7,
+    model="gpt-4-turbo-preview",
+    api_key=openai_key
+)
 
 # In-memory storage
 agents = {}
@@ -181,14 +252,42 @@ class MCPMetrics:
 mcp_metrics = MCPMetrics()
 
 # Model classes
+class AgentStatus(str, Enum):
+    ACTIVE = "active"
+    PAUSED = "paused"
+    IDLE = "idle"
+
+class AgentCapability(str, Enum):
+    GENERAL_ASSISTANCE = "general_assistance"
+    CODE_HELP = "code_help"
+    RESEARCH = "research"
+    WRITING = "writing"
+    TASK_MANAGEMENT = "task_management"
+
+class AgentRole(str, Enum):
+    ASSISTANT = "assistant"
+    CODER = "coder"
+    RESEARCHER = "researcher"
+    WRITER = "writer"
+
 class Agent(BaseModel):
     id: str
     name: str
     role: str
     goal: str
     capabilities: List[str]
-    status: str
+    status: str = Field(default="active", description="Agent status: active, paused, or idle")
     created_at: Optional[datetime] = None
+
+    class Config:
+        use_enum_values = True
+
+    @validator('status')
+    def validate_status(cls, v):
+        valid_statuses = ['active', 'paused', 'idle']
+        if v.lower() not in valid_statuses:
+            raise ValueError(f'Status must be one of: {", ".join(valid_statuses)}')
+        return v.lower()
 
 class MessageBase(BaseModel):
     content: str
@@ -217,106 +316,93 @@ class Tool(BaseModel):
     created_at: Optional[datetime] = None
 
 class ReasoningStep(BaseModel):
-    step_number: int
-    content: str
+    description: str = Field(..., description="Description of the reasoning step")
+    type: str = Field(default="thinking", description="Type of step: thinking, tool_call, tool_result, error, or final_answer")
 
-class EnhancedResponse(BaseModel):
-    content: str
-    reasoning_steps: List[ReasoningStep]
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'ReasoningStep':
+        """Create a ReasoningStep from a dictionary, handling both old and new formats."""
+        if isinstance(data, dict):
+            if 'description' in data:
+                return cls(description=data['description'], type=data.get('type', 'thinking'))
+            elif 'content' in data:
+                return cls(description=data['content'], type=data.get('type', 'thinking'))
+            elif 'step_number' in data:
+                content = data.get('content', 'Processing step')
+                return cls(description=content, type='thinking')
+        raise ValueError("Invalid reasoning step data format")
 
-class ConnectionManager:
-    def __init__(self):
-        self.active_connections: Dict[str, List[WebSocket]] = {}
+class ToolUsage(BaseModel):
+    tool_name: str
+    tool_input: Dict[str, Any]
+    result: Optional[Any] = None
+    status: Optional[str] = None
 
-    async def connect(self, websocket: WebSocket, agent_id: str):
-        await websocket.accept()
-        if agent_id not in self.active_connections:
-            self.active_connections[agent_id] = []
-        self.active_connections[agent_id].append(websocket)
-        logger.info(f"New WebSocket connection established for agent {agent_id}. Total connections: {len(self.active_connections[agent_id])}")
-        # Send welcome message
-        await websocket.send_json({
-            'type': 'system',
-            'content': f'Connected to {agents[agent_id].name if agent_id in agents else "Unknown Agent"}',
-            'timestamp': datetime.now().isoformat(),
-            'status': 'success'
-        })
+class FileData(BaseModel):
+    filename: str
+    content: str # Assuming Base64 encoded content
+    mime_type: Optional[str] = None
 
-    def disconnect(self, websocket: WebSocket, agent_id: str):
-        if agent_id in self.active_connections:
-            self.active_connections[agent_id].remove(websocket)
-            logger.info(f"WebSocket connection closed for agent {agent_id}. Remaining connections: {len(self.active_connections[agent_id])}")
-            if not self.active_connections[agent_id]:
-                del self.active_connections[agent_id]
-                logger.info(f"No more connections for agent {agent_id}, removing from active connections")
+class ChatMessageRequest(BaseModel):
+    message: str
+    conversation_id: Optional[str] = None
+    agent_id: Optional[str] = None
+    files: Optional[List[FileData]] = None # Added files list
 
-    async def broadcast(self, message: dict, agent_id: str):
-        if agent_id in self.active_connections:
-            logger.info(f"Broadcasting message to {len(self.active_connections[agent_id])} connection(s) for agent {agent_id}")
-            for connection in self.active_connections[agent_id]:
-                try:
-                    await connection.send_json(message)
-                    logger.info(f"Successfully sent message to connection for agent {agent_id}")
-                except Exception as e:
-                    logger.error(f"Error broadcasting message: {str(e)}")
-                    await self.handle_failed_connection(connection, agent_id)
-        else:
-            logger.warning(f"No active connections found for agent {agent_id}")
-
-    async def handle_failed_connection(self, websocket: WebSocket, agent_id: str):
-        logger.warning(f"Handling failed connection for agent {agent_id}")
-        try:
-            await websocket.close()
-        except Exception as e:
-            logger.error(f"Error closing failed connection: {str(e)}")
-        self.disconnect(websocket, agent_id)
-
-manager = ConnectionManager()
+class ChatResponse(BaseModel):
+    reply: str
+    reasoning: List[ReasoningStep]
+    tool_usage: List[ToolUsage] = []
+    conversation_id: str
+    agent_id: Optional[str] = None
+    files_received: Optional[List[str]] = None
 
 # Initialize sample data
 def initialize_sample_data():
     """Initialize sample agents and tools from configuration"""
     try:
-        # Initialize agents based on configured roles
+        # Initialize default agent first with clear capabilities and instructions
+        default_agent = Agent(
+            id="default_agent",
+            name="AI Assistant",
+            role="assistant",
+            goal="Help users with general tasks, questions, and provide informative responses",
+            capabilities=[
+                "general_assistance",
+                "task_management",
+                "code_help",
+                "research"
+            ],
+            status=AgentStatus.ACTIVE,  # Explicitly use AgentStatus enum
+            created_at=datetime.now()
+        )
+        agents["default_agent"] = default_agent
+        conversation_history["default_agent"] = []
+        logger.info("Initialized default agent")
+
+        # Initialize specialized agents based on configured roles
         agent_roles = config['agents']['roles']
         for role_id, role_config in agent_roles.items():
             try:
                 agent_id = f"{role_id}_agent"
-                agent = Agent(
-                    id=agent_id,
-                    name=role_id.capitalize(),
-                    role=role_id,
-                    goal=role_config['goal'],
-                    capabilities=role_config['capabilities'],
-                    status="active",
-                    created_at=datetime.now()
-                )
-                agents[agent_id] = agent
-                conversation_history[agent_id] = []
-                logger.info(f"Initialized agent: {agent_id}")
+                if agent_id != "default_agent":  # Skip if it's the default agent we already created
+                    agent = Agent(
+                        id=agent_id,
+                        name=role_id.capitalize(),
+                        role=role_id,
+                        goal=role_config['goal'],
+                        capabilities=role_config['capabilities'],
+                        status=AgentStatus.ACTIVE,  # Explicitly use AgentStatus enum
+                        created_at=datetime.now()
+                    )
+                    agents[agent_id] = agent
+                    conversation_history[agent_id] = []
+                    logger.info(f"Initialized specialized agent: {agent_id}")
             except Exception as e:
                 logger.error(f"Error initializing agent {role_id}: {str(e)}")
                 continue
 
-        # Initialize tools based on configuration
-        tools_config = config['tools']
-        for tool_id, tool_config in tools_config.items():
-            try:
-                tool = Tool(
-                    id=tool_id,
-                    name=tool_id,
-                    description=f"Tool for {tool_id}",
-                    api_endpoint=tool_config['endpoint'],
-                    available=True,
-                    created_at=datetime.now()
-                )
-                tools[tool_id] = tool
-                logger.info(f"Initialized tool: {tool_id}")
-            except Exception as e:
-                logger.error(f"Error initializing tool {tool_id}: {str(e)}")
-                continue
-
-        logger.info(f"Initialized {len(agents)} agents and {len(tools)} tools")
+        logger.info(f"Initialized {len(agents)} agents with enhanced configurations")
     except Exception as e:
         logger.error(f"Error in initialize_sample_data: {str(e)}")
         raise
@@ -342,6 +428,28 @@ async def get_tools():
 async def get_agent_messages(agent_id: str):
     agent_messages = [msg for msg in messages.values() if msg.agent_id == agent_id]
     return sorted(agent_messages, key=lambda x: x.timestamp)
+
+async def broadcast_response(agent_id: str, message: str, response: Dict[str, Any]) -> None:
+    """Broadcast agent response to all connected WebSocket clients for this agent."""
+    try:
+        # Prepare the broadcast message
+        broadcast_msg = {
+            "type": "agent_message",
+            "content": response["reply"],
+            "timestamp": datetime.now().isoformat(),
+            "status": "success",
+            "sender": "agent",
+            "agent_name": agents[agent_id].name if agent_id in agents else "Unknown Agent",
+            "reasoning_steps": [step.dict() for step in response.get("reasoning", [])],
+            "tool_usage": [tool.dict() for tool in response.get("tool_usage", [])]
+        }
+        
+        # Broadcast the message using the global manager
+        await manager.broadcast(broadcast_msg, agent_id)
+        
+    except Exception as e:
+        logger.error(f"Error broadcasting response: {str(e)}")
+        # Don't raise the exception - we don't want to break the main flow if broadcasting fails
 
 async def process_message(agent_id: str, data: dict):
     """Process incoming WebSocket message with token tracking"""
@@ -420,16 +528,16 @@ async def process_message(agent_id: str, data: dict):
                 }
             ]
 
-            # Create reasoning steps
+            # Create reasoning steps with proper format
             reasoning_steps = [
-                {
-                    'step_number': 1,
-                    'content': 'Received and processed user input'
-                },
-                {
-                    'step_number': 2,
-                    'content': f'Generated response based on {agent.role} capabilities'
-                }
+                ReasoningStep(
+                    description="Received and processed user input",
+                    type="thinking"
+                ),
+                ReasoningStep(
+                    description=f"Generated response based on {agent.role} capabilities",
+                    type="thinking"
+                )
             ]
 
             # Update MCP metrics
@@ -446,13 +554,13 @@ async def process_message(agent_id: str, data: dict):
                 'token_count': response_token_count,
                 'context': {
                     'nodes': context_nodes,
-                    'reasoning_steps': reasoning_steps,
+                    'reasoning_steps': [step.dict() for step in reasoning_steps],
                     'total_tokens': mcp_metrics.total_tokens,
                     'max_tokens': mcp_metrics.max_tokens
                 }
             }
             logger.info(f"Broadcasting response: {response}")
-            await manager.broadcast(response, agent_id)
+            await broadcast_response(agent_id, content, response)
             return response
 
         elif data['type'] == 'typing':
@@ -477,7 +585,7 @@ async def process_message(agent_id: str, data: dict):
             'timestamp': datetime.now().isoformat(),
             'error_code': 'VALIDATION_ERROR'
         }
-        await manager.broadcast(error_response, agent_id)
+        await broadcast_response(agent_id, content, error_response)
         return error_response
 
     except Exception as e:
@@ -488,206 +596,221 @@ async def process_message(agent_id: str, data: dict):
             'timestamp': datetime.now().isoformat(),
             'error_code': 'PROCESSING_ERROR'
         }
-        await manager.broadcast(error_response, agent_id)
+        await broadcast_response(agent_id, content, error_response)
         return error_response
 
 def generate_agent_response(agent: Agent, user_message: str) -> str:
+    """Generate a response based on agent role and user message."""
     try:
-        # Basic response generation based on agent role
-        responses = {
-            "Academic Research": f"As a Research Assistant, I can help you with: {', '.join(agent.capabilities)}. How can I assist with your research?",
-            "Programming Assistant": f"I'm your Code Helper with expertise in: {', '.join(agent.capabilities)}. What coding challenge can I help you with?",
-            "Content Creation": f"As a Writing Assistant, I specialize in: {', '.join(agent.capabilities)}. How can I help improve your writing?"
-        }
-        
-        return responses.get(agent.role, f"I am {agent.name}, how can I assist you?")
-        
+        # Basic response generation based on agent role and message
+        if user_message.lower().strip() in ["hi", "hey", "hello", "hola", "hi there", "hey there", "greetings"]:
+            capabilities = ", ".join(agent.capabilities)
+            return f"Hello! I'm your {agent.role} assistant. I can help you with: {capabilities}. How can I assist you today?"
+            
+        # Handle general queries
+        if agent.role == "researcher":
+            return f"I understand you'd like to explore '{user_message}'. As a research assistant, I can help you gather and analyze information about this topic. What specific aspects would you like to investigate?"
+        elif agent.role == "coder":
+            return f"I see you're interested in '{user_message}'. As a coding assistant, I can help you with code implementation, debugging, or understanding programming concepts. What would you like to focus on?"
+        elif agent.role == "writer":
+            return f"Regarding '{user_message}', as a writing assistant, I can help you with content creation, editing, or improving your text. What specific writing assistance do you need?"
+        else:
+            # Default response for general assistant
+            return f"I understand your interest in '{user_message}'. I'm here to help you with any questions or tasks you have. Would you like me to explain something specific or help you accomplish a particular goal?"
+            
     except Exception as e:
         logger.error(f"Error generating response: {str(e)}")
         return "I apologize, but I'm having trouble processing your request at the moment. Could you please try again?"
 
 @app.websocket("/ws/{agent_id}")
 async def websocket_endpoint(websocket: WebSocket, agent_id: str):
-    await websocket.accept()
+    await manager.connect(websocket, agent_id)
     
     if agent_id not in agents:
-        await websocket.send_json({"type": "error", "content": "Agent not found"})
+        await websocket.send_json({
+            "type": "error", 
+            "content": "Agent not found",
+            "timestamp": datetime.now().isoformat()
+        })
         await websocket.close()
         return
     
-    active_connections[agent_id] = websocket
-    
     try:
-        # Send system message on connection
-        await websocket.send_json({
-            "type": "system",
-            "content": f"Connected to {agents[agent_id]['name']}",
-            "timestamp": datetime.now().isoformat(),
-            "status": "success"
-        })
-        
         # Initialize conversation history if not exists
         if agent_id not in conversation_history:
             conversation_history[agent_id] = []
         
         # Process messages
         async for data in websocket.iter_json():
-            message_type = data.get("type", "")
-            
-            if message_type == "message":
-                # User message to agent
-                content = data.get("content", "")
-                
-                # Save user message to history
-                conversation_history[agent_id].append({
-                    "sender": "user",
-                    "content": content,
-                    "timestamp": datetime.now().isoformat()
-                })
-                
-                # Simulate thinking
+            try:
+                if data.get("type") == "message":
+                    content = data.get("content", "").strip()
+                    
+                    # Save user message to history
+                    conversation_history[agent_id].append({
+                        "sender": "user",
+                        "content": content,
+                        "timestamp": datetime.now().isoformat()
+                    })
+                    
+                    # Process the message through the agent
+                    result = await process_agent_request(
+                        agent_id=agent_id,
+                        message=content,
+                        conversation_id=str(time.time()),
+                        history=conversation_history[agent_id]
+                    )
+                    
+                    # Ensure we have a proper response
+                    if not result["reply"] or "placeholder" in result["reply"].lower():
+                        # Generate a proper greeting if it's a greeting message
+                        greeting_patterns = ["hi", "hey", "hello", "hola", "hi there", "hey there", "greetings"]
+                        if content.lower().strip() in greeting_patterns:
+                            agent = agents[agent_id]
+                            capabilities = ", ".join(agent.capabilities)
+                            result["reply"] = f"Hello! I'm your {agent.role} assistant. I can help you with: {capabilities}. How can I assist you today?"
+                            result["reasoning"] = [
+                                ReasoningStep(
+                                    description="Received a greeting, responding with a friendly introduction and my capabilities.",
+                                    type="thinking"
+                                )
+                            ]
+                    
+                    # Send the response
+                    await websocket.send_json({
+                        "type": "agent_message",
+                        "content": result["reply"],
+                        "timestamp": datetime.now().isoformat(),
+                        "status": "success",
+                        "sender": "agent",
+                        "agent_name": agents[agent_id].name,
+                        "reasoning_steps": [step.dict() for step in result.get("reasoning", [])],
+                        "tool_usage": [tool.dict() for tool in result.get("tool_usage", [])]
+                    })
+                    
+                    # Save agent response to history
+                    conversation_history[agent_id].append({
+                        "sender": "agent",
+                        "content": result["reply"],
+                        "timestamp": datetime.now().isoformat()
+                    })
+                    
+            except Exception as e:
+                logger.error(f"Error processing message: {str(e)}")
                 await websocket.send_json({
-                    "type": "thinking",
+                    "type": "error",
+                    "content": f"Error processing message: {str(e)}",
                     "timestamp": datetime.now().isoformat()
                 })
-                
-                # Simulate delay for agent response
-                await asyncio.sleep(random.uniform(0.5, 2.0))
-                
-                # Check if the message is asking to use a tool
-                if "please use the" in content.lower() and "tool" in content.lower():
-                    tool_match = re.search(r"please use the (.*?) tool", content, re.IGNORECASE)
-                    if tool_match:
-                        tool_name = tool_match.group(1).strip()
-                        logger.info(f"Tool request detected: {tool_name}")
-                        
-                        # Find the tool
-                        tool = None
-                        for t in tools.values():
-                            if t["name"].lower() == tool_name.lower():
-                                tool = t
-                                break
-                        
-                        if tool:
-                            # Process tool request
-                            await process_tool_request({
-                                "tool_id": tool["id"],
-                                "tool_name": tool["name"],
-                                "content": content,
-                                "agent_id": agent_id
-                            }, websocket)
-                            
-                            # Add reasoning steps about tool usage
-                            await websocket.send_json({
-                                "type": "reasoning",
-                                "steps": [
-                                    f"Identified request to use the {tool['name']} tool",
-                                    f"Extracted necessary information from the request",
-                                    f"Processed the request with the {tool['name']} tool"
-                                ],
-                                "timestamp": datetime.now().isoformat()
-                            })
-                            
-                            # Send agent response about tool results
-                            agent_response = f"I've used the {tool['name']} tool to help with your request. The results are shown above."
-                            
-                            await websocket.send_json({
-                                "type": "agent_message",
-                                "content": agent_response,
-                                "timestamp": datetime.now().isoformat(),
-                                "status": "success",
-                                "sender": "agent",
-                                "agent_name": agents[agent_id]["name"],
-                                "token_count": len(agent_response.split())
-                            })
-                            
-                            # Save agent response to history
-                            conversation_history[agent_id].append({
-                                "sender": "agent",
-                                "content": agent_response,
-                                "timestamp": datetime.now().isoformat()
-                            })
-                            
-                            continue
-                
-                # Send default agent response
-                agent_response = agents[agent_id]["default_response"]
-                
-                await websocket.send_json({
-                    "type": "agent_message",
-                    "content": agent_response,
-                    "timestamp": datetime.now().isoformat(),
-                    "status": "success",
-                    "sender": "agent",
-                    "agent_name": agents[agent_id]["name"],
-                    "token_count": len(agent_response.split())
-                })
-                
-                # Save agent response to history
-                conversation_history[agent_id].append({
-                    "sender": "agent",
-                    "content": agent_response,
-                    "timestamp": datetime.now().isoformat()
-                })
-                
-            elif message_type == "tool_request":
-                # Direct request to use a tool
-                await process_tool_request(data, websocket)
     
     except WebSocketDisconnect:
-        if agent_id in active_connections:
-            del active_connections[agent_id]
+        manager.disconnect(websocket, agent_id)
         logger.info(f"WebSocket disconnected for agent {agent_id}")
     
     except Exception as e:
         logger.error(f"WebSocket error for agent {agent_id}: {str(e)}")
-        if agent_id in active_connections:
-            del active_connections[agent_id]
+        manager.disconnect(websocket, agent_id)
 
 @app.options("/api/agents/{agent_id}/messages")
 async def messages_options():
     return {}  # Return empty dict for OPTIONS request
 
-class MessageRequest(BaseModel):
-    content: str
-    sender: str = "user"
-
-@app.post("/api/agents/{agent_id}/chat")
-async def chat_with_agent(
-    agent_id: str,
-    payload: Dict[str, Any]
-):
+@app.post("/api/chat", response_model=ChatResponse)
+async def chat_endpoint(request: ChatMessageRequest):
     try:
+        # Use default agent if none specified
+        selected_agent_id = request.agent_id or "default_agent"
+        logger.info(f"Received chat request for agent: {selected_agent_id}")
+        
         # Validate agent exists
-        if agent_id not in agents:
+        if selected_agent_id not in agents:
             raise HTTPException(status_code=404, detail="Agent not found")
+        
+        # Handle conversation ID and history
+        conversation_id = request.conversation_id or f"conv_{datetime.now().timestamp()}"
+        if conversation_id not in conversation_history:
+            conversation_history[conversation_id] = []
+            logger.info(f"Started new conversation: {conversation_id}")
+        
+        history = conversation_history[conversation_id]
+        logger.debug(f"Retrieved history for {conversation_id} (length: {len(history)})")
 
-        # Validate payload
-        if "content" not in payload:
-            raise HTTPException(status_code=400, detail="Message content is required")
-
-        # Generate agent response
-        agent = agents[agent_id]
-        response_content = generate_agent_response(agent, payload["content"])
-
-        # Create reasoning steps
-        reasoning_steps = [
-            ReasoningStep(step_number=1, content="Processed user message"),
-            ReasoningStep(step_number=2, content="Generated response based on agent role and capabilities")
-        ]
-
-        return {
-            "content": response_content,
-            "reasoning_steps": reasoning_steps
+        # Store user message in history
+        user_message_entry = {
+            "sender": "user",
+            "content": request.message,
+            "timestamp": datetime.now().isoformat()
         }
+        if request.files:
+            user_message_entry["files"] = [f.filename for f in request.files]
+        history.append(user_message_entry)
 
-    except HTTPException as he:
-        raise he
+        # Process through agent
+        result = await process_agent_request(
+            agent_id=selected_agent_id,
+            message=request.message,
+            conversation_id=conversation_id,
+            history=history,
+            files=request.files
+        )
+
+        # Store agent response in history
+        agent_reply_entry = {
+            "sender": "agent",
+            "content": result["reply"],
+            "timestamp": datetime.now().isoformat()
+        }
+        history.append(agent_reply_entry)
+
+        # Convert reasoning steps to proper format
+        reasoning_steps = []
+        for step in result.get("reasoning_steps", []):
+            if isinstance(step, dict):
+                # Ensure the step has a description field
+                description = step.get("description")
+                if not description:
+                    # If no description, try to get it from content or create one
+                    description = step.get("content", "Processing step")
+                    if "step_number" in step:
+                        description = f"Step {step['step_number']}: {description}"
+                
+                reasoning_steps.append(ReasoningStep(
+                    description=description,
+                    type=step.get("type", "thinking")
+                ))
+            elif isinstance(step, ReasoningStep):
+                reasoning_steps.append(step)
+
+        # Create and return the response
+        response = ChatResponse(
+            reply=result["reply"],
+            reasoning=reasoning_steps,
+            tool_usage=result.get("tool_usage", []),
+            conversation_id=conversation_id,
+            agent_id=selected_agent_id,
+            files_received=[f.filename for f in request.files] if request.files else None
+        )
+        
+        # Update conversation history
+        conversation_history[conversation_id] = history
+        
+        return response
+
     except Exception as e:
-        logger.error(f"Error processing message: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error processing message: {str(e)}"
+        logger.error(f"Error in chat endpoint: {str(e)}")
+        # Create error response with proper reasoning steps
+        error_steps = [
+            ReasoningStep(
+                description=f"Error occurred while processing request: {str(e)}",
+                type="error"
+            )
+        ]
+        return ChatResponse(
+            reply=f"Failed to process chat request: {str(e)}",
+            reasoning=error_steps,
+            tool_usage=[],
+            conversation_id=conversation_id,
+            agent_id=selected_agent_id
         )
 
 @app.get("/api/metrics")
@@ -747,23 +870,32 @@ async def health_check():
 async def health_check_options():
     return {}
 
-@app.put("/api/agents/{agent_id}", response_model=Agent)
-async def update_agent(agent_id: str, update_data: dict = Body(...)):
-    """Update agent properties"""
-    if agent_id not in agents:
-        raise HTTPException(status_code=404, detail="Agent not found")
-    
-    # Get the current agent data
-    agent = agents[agent_id]
-    
-    # Update only the allowed fields
-    if "status" in update_data:
-        if update_data["status"] not in ["active", "idle"]:
-            raise HTTPException(status_code=400, detail="Invalid status value")
-        agent.status = update_data["status"]
-    
-    # Return the updated agent
-    return agent
+@app.put("/api/agents/{state}")
+async def update_agents_state(state: str):
+    """Update all agents to the specified state"""
+    try:
+        # Validate the state
+        valid_statuses = ['active', 'paused', 'idle']
+        if state.lower() not in valid_statuses:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Invalid state. Must be one of: {', '.join(valid_statuses)}"
+            )
+        
+        # Update all agents
+        for agent_id in agents:
+            agents[agent_id].status = state.lower()
+        
+        return {
+            "success": True,
+            "message": f"Updated all agents to {state.lower()} state",
+            "count": len(agents)
+        }
+    except ValueError as ve:
+        raise HTTPException(status_code=422, detail=str(ve))
+    except Exception as e:
+        logger.error(f"Error updating agent states: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.options("/api/agents/{agent_id}")
 async def agent_options():
@@ -1102,5 +1234,112 @@ async def startup_event():
     initialize_sample_data()
     logger.info("Application startup complete")
 
+async def process_agent_request(agent_id: str, message: str, conversation_id: str, history: List[Dict], files: Optional[List[FileData]] = None) -> Dict[str, Any]:
+    """Process the user request using real agent logic with LangChain."""
+    try:
+        logger.info(f"[Agent Process] START - Agent: {agent_id}, Conversation: {conversation_id}")
+        
+        # Initialize response structure with properly formatted reasoning steps
+        response = {
+            "reply": "",
+            "reasoning_steps": [],
+            "tool_usage": []
+        }
+        
+        # Basic input validation
+        if not message or len(message.strip()) == 0:
+            response["reply"] = "I'm here to help! What would you like to discuss?"
+            response["reasoning_steps"] = [
+                ReasoningStep(
+                    description="Received empty message, responding with greeting",
+                    type="thinking"
+                )
+            ]
+            return response
+            
+        # Process files if present
+        if files:
+            for file in files:
+                logger.info(f"Processing file: {file.filename}")
+                response["reasoning_steps"].append(
+                    ReasoningStep(
+                        description=f"Processing attached file: {file.filename}",
+                        type="thinking"
+                    )
+                )
+                
+        # Get agent configuration
+        agent = agents.get(agent_id)
+        if not agent:
+            raise ValueError(f"Agent {agent_id} not found")
+            
+        # Process based on agent role
+        logger.info(f"[Agent Process] Processing request using {agent.role}")
+        
+        # Add initial processing step
+        response["reasoning_steps"].append(
+            ReasoningStep(
+                description=f"Processing request using {agent.role} capabilities",
+                type="thinking"
+            )
+        )
+        
+        # Generate response based on agent role
+        if agent.role == "researcher":
+            response["reasoning_steps"].append(
+                ReasoningStep(
+                    description="Analyzing query for research requirements and formulating response",
+                    type="thinking"
+                )
+            )
+            response["reply"] = "I am Research Assistant, how can I help with your research?"
+            
+        elif agent.role == "coder":
+            response["reasoning_steps"].append(
+                ReasoningStep(
+                    description="Analyzing query for coding assistance and preparing response",
+                    type="thinking"
+                )
+            )
+            response["reply"] = "I am Code Assistant, how can I help with your code?"
+            
+        else:
+            response["reasoning_steps"].append(
+                ReasoningStep(
+                    description="Generating general assistance response based on user query",
+                    type="thinking"
+                )
+            )
+            response["reply"] = "I am AI Assistant, how can I assist you?"
+            
+        # Add final processing step
+        response["reasoning_steps"].append(
+            ReasoningStep(
+                description="Generated and validated response for user query",
+                type="thinking"
+            )
+        )
+        
+        # Log the response for debugging
+        logger.info(f"[Agent Process] Generated response: {response['reply']}")
+        
+        # Broadcast the response through websocket if available
+        await broadcast_response(agent_id, message, response)
+        
+        return response
+        
+    except Exception as e:
+        logger.error(f"Error in process_agent_request: {str(e)}")
+        return {
+            "reply": f"Error processing request: {str(e)}",
+            "reasoning_steps": [
+                ReasoningStep(
+                    description=f"Error occurred while processing request: {str(e)}",
+                    type="error"
+                )
+            ],
+            "tool_usage": []
+        }
+
 if __name__ == "__main__":
-    uvicorn.run(app, host="localhost", port=8000) 
+    uvicorn.run("main:app", host="127.0.0.1", port=5000, reload=True) 

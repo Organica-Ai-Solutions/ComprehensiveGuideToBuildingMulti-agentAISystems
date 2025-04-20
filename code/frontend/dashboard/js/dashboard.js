@@ -9,7 +9,7 @@ const DashboardTheme = {
     },
 
     loadTheme() {
-        const theme = localStorage.getItem('theme') || 'light';
+        const theme = localStorage.getItem(window.THEME_CONFIG.STORAGE_KEY) || window.THEME_CONFIG.DEFAULT;
         document.body.setAttribute('data-bs-theme', theme);
         this.updateToggleButton(theme);
     },
@@ -18,7 +18,7 @@ const DashboardTheme = {
         const currentTheme = document.body.getAttribute('data-bs-theme');
         const newTheme = currentTheme === 'light' ? 'dark' : 'light';
         document.body.setAttribute('data-bs-theme', newTheme);
-        localStorage.setItem('theme', newTheme);
+        localStorage.setItem(window.THEME_CONFIG.STORAGE_KEY, newTheme);
         this.updateToggleButton(newTheme);
     },
 
@@ -40,500 +40,630 @@ const DashboardTheme = {
 // Charts Management
 const ChartsManager = {
     charts: {},
+    // Default update interval, can be overridden by config
+    updateInterval: window.UI_CONFIG?.UPDATE_INTERVAL || 30000, 
 
     init() {
-        // Only initialize if Chart.js is available
         if (typeof Chart === 'undefined') {
-            console.warn('Charts Manager: Chart.js not loaded');
+            console.error('Chart.js is not loaded');
             return;
         }
-        
-        this.initTokenChart();
-        this.initRateLimitChart();
-        this.updateCharts();
-        this.updateSecurityMetrics();
-
-        // Set up periodic updates
-        setInterval(() => {
-            this.updateCharts();
-            this.updateSecurityMetrics();
-        }, 30000);
-    },
-
-    initTokenChart() {
-        const canvas = document.getElementById('token-history-chart');
-        if (!canvas) return;
-
-        // Destroy existing chart if it exists
-        if (this.charts.tokenHistory) {
-            this.charts.tokenHistory.destroy();
-        }
-
-        const ctx = canvas.getContext('2d');
-        this.charts.tokenHistory = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: [],
-                datasets: [{
-                    label: 'Token Usage',
-                    data: [],
-                    borderColor: '#0d6efd',
-                    tension: 0.4
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        display: false
-                    }
-                },
-                scales: {
-                    y: {
-                        beginAtZero: true
-                    }
-                }
-            }
-        });
-    },
-
-    initRateLimitChart() {
-        const canvas = document.getElementById('rate-limit-chart');
-        if (!canvas) return;
-
-        // Destroy existing chart if it exists
-        if (this.charts.rateLimit) {
-            this.charts.rateLimit.destroy();
-        }
-
-        const ctx = canvas.getContext('2d');
-        this.charts.rateLimit = new Chart(ctx, {
-            type: 'bar',
-            data: {
-                labels: ['API Calls', 'Rate Limit'],
-                datasets: [{
-                    data: [0, 100],
-                    backgroundColor: ['#0d6efd', '#6c757d']
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        display: false
-                    }
-                },
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        max: 100
-                    }
-                }
-            }
-        });
-    },
-
-    async updateCharts() {
-        if (!window.API_CONFIG) {
-            console.error('Charts Manager: API_CONFIG not found');
-            return;
-        }
-
-        try {
-            const response = await fetch(`${window.API_CONFIG.BASE_URL}${window.API_CONFIG.ENDPOINTS.METRICS}`);
-            const metrics = await response.json();
-            
-            // Update token history chart
-            const tokenChart = this.charts.tokenHistory;
-            if (tokenChart) {
-                tokenChart.data.labels.push(new Date().toLocaleTimeString());
-                tokenChart.data.datasets[0].data.push(metrics.token_usage || 0);
-                
-                // Keep last 10 data points
-                if (tokenChart.data.labels.length > 10) {
-                    tokenChart.data.labels.shift();
-                    tokenChart.data.datasets[0].data.shift();
-                }
-                
-                tokenChart.update();
-            }
-            
-            // Update rate limit chart
-            const rateLimitChart = this.charts.rateLimit;
-            if (rateLimitChart) {
-                rateLimitChart.data.datasets[0].data = [
-                    metrics.api_calls || 0,
-                    metrics.rate_limit || 100
-                ];
-                rateLimitChart.update();
-            }
-            
-            // Update token usage metrics
-            this.updateMetricsDisplay(metrics);
-            
-        } catch (error) {
-            console.error('Error updating charts:', error);
-        }
-    },
-
-    async updateSecurityMetrics() {
-        if (!window.API_CONFIG) {
-            console.error('Charts Manager: API_CONFIG not found');
-            return;
-        }
-
-        try {
-            const response = await fetch(`${window.API_CONFIG.BASE_URL}${window.API_CONFIG.ENDPOINTS.SECURITY}/events`);
-            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-            
-            const data = await response.json();
-            this.updateSecurityDisplay(data);
-        } catch (error) {
-            console.error('Error updating security metrics:', error);
-        }
-    },
-
-    updateMetricsDisplay(metrics) {
-        const elements = {
-            totalTokens: document.getElementById('total-tokens-count'),
-            sessionTokens: document.getElementById('session-tokens-count'),
-            avgTokens: document.getElementById('avg-tokens-count'),
-            usageBar: document.getElementById('token-usage-bar'),
-            usagePercent: document.getElementById('token-usage-percent')
-        };
-
-        if (elements.totalTokens) {
-            elements.totalTokens.textContent = metrics.total_tokens || 0;
-        }
-        if (elements.sessionTokens) {
-            elements.sessionTokens.textContent = metrics.session_tokens || 0;
-        }
-        if (elements.avgTokens) {
-            elements.avgTokens.textContent = metrics.avg_tokens || 0;
-        }
-        
-        const usagePercent = (metrics.token_usage || 0) / (metrics.token_limit || 100) * 100;
-        if (elements.usageBar) {
-            elements.usageBar.style.width = `${usagePercent}%`;
-        }
-        if (elements.usagePercent) {
-            elements.usagePercent.textContent = `${Math.round(usagePercent)}%`;
-        }
-    },
-
-    updateSecurityDisplay(data) {
-        const threatFeed = document.getElementById('threat-feed');
-        if (threatFeed && data.threats) {
-            threatFeed.innerHTML = data.threats.map(threat => `
-                <div class="alert alert-${threat.severity} mb-2">
-                    <small class="d-block"><strong>${threat.type}</strong></small>
-                    ${threat.message}
-                </div>
-            `).join('');
-        }
-
-        const requestMap = document.getElementById('request-map');
-        if (requestMap && data.requests) {
-            requestMap.innerHTML = `
-                <div class="table-responsive">
-                    <table class="table table-sm">
-                        <thead>
-                            <tr>
-                                <th>Path</th>
-                                <th>Count</th>
-                                <th>Status</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${data.requests.map(req => `
-                                <tr>
-                                    <td>${req.path}</td>
-                                    <td>${req.count}</td>
-                                    <td>
-                                        <span class="badge bg-${req.status < 400 ? 'success' : 'danger'}">
-                                            ${req.status}
-                                        </span>
-                                    </td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
-                </div>
-            `;
-        }
-    }
-};
-
-// System Metrics Management
-const MetricsManager = {
-    init() {
-        this.updateMetrics();
-        setInterval(() => this.updateMetrics(), 30000);
-    },
-
-    async updateMetrics() {
-        try {
-            const response = await fetch(`${window.API_CONFIG.BASE_URL}${window.API_CONFIG.ENDPOINTS.METRICS}`);
-            const metrics = await response.json();
-            
-            // Update system metrics
-            document.getElementById('activeAgents').textContent = metrics.active_agents || 0;
-            document.getElementById('activeTasks').textContent = metrics.active_tasks || 0;
-            document.getElementById('systemLoad').textContent = `${metrics.system_load || 0}%`;
-            document.getElementById('responseTime').textContent = `${metrics.response_time || 0}ms`;
-            document.getElementById('successRate').textContent = `${metrics.success_rate || 0}%`;
-            document.getElementById('tasksCompleted').textContent = metrics.tasks_completed || 0;
-            document.getElementById('activeSessions').textContent = metrics.active_sessions || 0;
-            
-        } catch (error) {
-            console.error('Error updating metrics:', error);
-        }
-    }
-};
-
-// Initialize all components when the DOM is loaded
-document.addEventListener('DOMContentLoaded', () => {
-    // Check if required dependencies are available
-    if (!window.API_CONFIG) {
-        console.error('Dashboard: Required API_CONFIG not found');
-        return;
-    }
-
-    // Initialize components
-    DashboardTheme.init();
-    ChartsManager.init();
-    MetricsManager.init();
-});
-
-// Dashboard initialization
-document.addEventListener('DOMContentLoaded', () => {
-    DashboardManager.init();
-});
-
-// Dashboard Manager
-const DashboardManager = {
-    charts: {},
-    
-    init() {
         this.initializeCharts();
-        this.initializeStats();
-        this.setupRefreshInterval();
+        // Initialize all charts here
+        this.initTaskDistChart();
+        this.initPerformanceChart();
+        this.initResourceChart();
+        // Rate limit chart is initialized in initializeCharts()
     },
 
     initializeCharts() {
-        // Task Distribution Chart
-        this.charts.taskDist = new Chart(document.getElementById('taskDistChart'), {
+        try {
+            // Initialize rate limit chart
+            const rateLimitCtx = document.getElementById('rate-limit-chart');
+            if (rateLimitCtx) {
+                // Destroy existing chart if it exists
+                if (this.charts.rateLimit) {
+                    this.charts.rateLimit.destroy();
+                }
+
+                this.charts.rateLimit = new Chart(rateLimitCtx, {
+                    type: 'line',
+                    data: {
+                        labels: [],
+                        datasets: [{
+                            label: 'Requests/min',
+                            data: [],
+                            borderColor: 'rgb(75, 192, 192)',
+                            tension: 0.1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: {
+                                beginAtZero: true
+                            }
+                        }
+                    }
+                });
+            }
+        } catch (error) {
+            console.error('Error initializing charts:', error);
+        }
+    },
+
+    updateRateLimitChart(data) {
+        try {
+            if (!this.charts.rateLimit) {
+                console.error('Rate limit chart not initialized');
+                return;
+            }
+
+            const chart = this.charts.rateLimit;
+            chart.data.labels = data.timestamps || [];
+            chart.data.datasets[0].data = data.values || [];
+            chart.update();
+        } catch (error) {
+            console.error('Error updating rate limit chart:', error);
+        }
+    },
+
+    initTaskDistChart() {
+        const canvas = document.getElementById('taskDistChart');
+        if (!canvas) return;
+
+        this.charts.taskDist = new Chart(canvas, {
             type: 'doughnut',
             data: {
                 labels: ['Completed', 'In Progress', 'Failed'],
                 datasets: [{
                     data: [0, 0, 0],
-                    backgroundColor: ['#0d6efd', '#ffc107', '#dc3545']
+                    backgroundColor: [
+                        window.CHART_CONFIG.COLORS.PRIMARY,
+                        window.CHART_CONFIG.COLORS.WARNING,
+                        window.CHART_CONFIG.COLORS.DANGER
+                    ],
+                    borderWidth: 0
                 }]
             },
             options: {
-                responsive: true,
-                maintainAspectRatio: false,
+                ...window.CHART_CONFIG.DEFAULT_OPTIONS,
+                cutout: '70%',
                 plugins: {
                     legend: {
-                        position: 'bottom'
+                        position: 'bottom',
+                        labels: {
+                            padding: 20,
+                            usePointStyle: true
+                        }
                     }
                 }
             }
         });
+    },
 
-        // Performance Metrics Chart
-        this.charts.performance = new Chart(document.getElementById('performanceChart'), {
+    initPerformanceChart() {
+        const canvas = document.getElementById('performanceChart');
+        if (!canvas) return;
+
+        this.charts.performance = new Chart(canvas, {
             type: 'line',
             data: {
                 labels: [],
                 datasets: [{
                     label: 'Response Time (ms)',
                     data: [],
-                    borderColor: '#0d6efd',
-                    tension: 0.4
+                    borderColor: window.CHART_CONFIG.COLORS.PRIMARY,
+                    backgroundColor: `rgba(${this.hexToRgb(window.CHART_CONFIG.COLORS.PRIMARY)}, 0.1)`,
+                    fill: true,
+                    tension: 0.4,
+                    borderWidth: 2
                 }]
             },
             options: {
-                responsive: true,
-                maintainAspectRatio: false,
+                ...window.CHART_CONFIG.DEFAULT_OPTIONS,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: {
+                            display: true,
+                            color: 'rgba(255, 255, 255, 0.1)'
+                        }
+                    },
+                    x: {
+                        grid: {
+                            display: false
+                        }
+                    }
+                },
                 plugins: {
                     legend: {
                         display: false
                     }
-                },
-                scales: {
-                    y: {
-                        beginAtZero: true
-                    }
                 }
             }
         });
+    },
 
-        // Resource Usage Chart
-        this.charts.resource = new Chart(document.getElementById('resourceChart'), {
+    initResourceChart() {
+        const canvas = document.getElementById('resourceChart');
+        if (!canvas) return;
+
+        this.charts.resource = new Chart(canvas, {
             type: 'bar',
             data: {
                 labels: ['CPU', 'Memory', 'Network'],
                 datasets: [{
                     label: 'Usage %',
                     data: [0, 0, 0],
-                    backgroundColor: '#0d6efd'
+                    backgroundColor: [
+                        window.CHART_CONFIG.COLORS.PRIMARY,
+                        window.CHART_CONFIG.COLORS.SUCCESS,
+                        window.CHART_CONFIG.COLORS.INFO
+                    ],
+                    borderRadius: 5
                 }]
             },
             options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        display: false
-                    }
-                },
+                ...window.CHART_CONFIG.DEFAULT_OPTIONS,
                 scales: {
                     y: {
                         beginAtZero: true,
-                        max: 100
+                        max: 100,
+                        grid: {
+                            display: true,
+                            color: 'rgba(255, 255, 255, 0.1)'
+                        }
+                    },
+                    x: {
+                        grid: {
+                            display: false
+                        }
                     }
-                }
-            }
-        });
-
-        // Rate Limits Chart
-        this.charts.rateLimit = new Chart(document.getElementById('rateLimitChart'), {
-            type: 'line',
-            data: {
-                labels: [],
-                datasets: [{
-                    label: 'API Calls/min',
-                    data: [],
-                    borderColor: '#0d6efd',
-                    tension: 0.4
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
+                },
                 plugins: {
                     legend: {
                         display: false
                     }
-                },
-                scales: {
-                    y: {
-                        beginAtZero: true
-                    }
                 }
             }
         });
     },
 
-    async initializeStats() {
-        // Set up click handlers for chart download buttons
-        document.querySelectorAll('.chart-actions button').forEach(button => {
-            button.addEventListener('click', (e) => {
-                const chartCard = e.target.closest('.chart-card');
-                const canvas = chartCard.querySelector('canvas');
-                if (canvas) {
-                    const link = document.createElement('a');
-                    link.download = 'chart.png';
-                    link.href = canvas.toDataURL('image/png');
-                    link.click();
-                }
-            });
-        });
-
-        await this.updateStats();
+    // Helper function to convert hex color to RGB
+    hexToRgb(hex) {
+        const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+        return result ? 
+            `${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}` : 
+            '0, 0, 0';
     },
 
-    setupRefreshInterval() {
-        // Update every 30 seconds
-        setInterval(() => {
-            this.updateStats();
-        }, 30000);
-    },
-
-    async updateStats() {
+    // New function to update all charts from consolidated data
+    updateAllCharts(chartData) {
+        if (!chartData) {
+            console.warn("ChartsManager: No chart data received.");
+            return;
+        }
         try {
-            const response = await fetch(`${window.API_CONFIG.BASE_URL}/metrics`);
-            const data = await response.json();
+            // Update specific metrics like rate limit
+            if (chartData.rate_limits) {
+                this.updateRateLimitChart(chartData.rate_limits);
+            }
+            // Update general chart data (task dist, performance, resource)
+            this.updateChartData(chartData); 
+        } catch (error) {
+            console.error('Error updating charts from consolidated data:', error);
+        }
+    },
 
-            // Update stat cards
-            document.getElementById('activeAgents').textContent = data.activeAgents || 0;
-            document.getElementById('tasksCompleted').textContent = data.tasksCompleted || 0;
-            document.getElementById('successRate').textContent = `${data.successRate || 0}%`;
-            document.getElementById('avgResponseTime').textContent = `${data.avgResponseTime || 0}ms`;
+    // General chart data update (previously part of updateCharts)
+    updateChartData(data) {
+        if (!data) return;
 
-            // Update task distribution chart
-            this.charts.taskDist.data.datasets[0].data = [
-                data.taskStats?.completed || 0,
-                data.taskStats?.inProgress || 0,
-                data.taskStats?.failed || 0
+        // Update task distribution chart
+        if (this.charts.taskDist && data.taskStats) {
+            const taskData = [
+                data.taskStats.completed || 0,
+                data.taskStats.inProgress || 0,
+                data.taskStats.failed || 0
             ];
+            this.charts.taskDist.data.datasets[0].data = taskData;
             this.charts.taskDist.update();
+        }
 
-            // Update performance chart
+        // Update performance chart
+        if (this.charts.performance && data.responseTime) {
             const time = new Date().toLocaleTimeString();
-            this.charts.performance.data.labels.push(time);
-            this.charts.performance.data.datasets[0].data.push(data.avgResponseTime || 0);
-            if (this.charts.performance.data.labels.length > 10) {
-                this.charts.performance.data.labels.shift();
-                this.charts.performance.data.datasets[0].data.shift();
-            }
-            this.charts.performance.update();
+            const performanceData = this.charts.performance.data;
+            
+            // Check if responseTime is a valid number
+            const responseTimeValue = parseFloat(data.responseTime);
+            if (!isNaN(responseTimeValue)) {
+                performanceData.labels.push(time);
+                performanceData.datasets[0].data.push(responseTimeValue);
 
-            // Update resource usage chart
-            this.charts.resource.data.datasets[0].data = [
-                data.resourceUsage?.cpu || 0,
-                data.resourceUsage?.memory || 0,
-                data.resourceUsage?.network || 0
+                // Keep only last N data points (e.g., 10)
+                const maxDataPoints = window.UI_CONFIG?.CHART_MAX_POINTS || 10;
+                if (performanceData.labels.length > maxDataPoints) {
+                    performanceData.labels.shift();
+                    performanceData.datasets[0].data.shift();
+                }
+                this.charts.performance.update();
+            } else {
+                 console.warn("Invalid responseTime value received:", data.responseTime);
+            }
+        }
+
+        // Update resource usage chart
+        if (this.charts.resource && data.resourceUsage) {
+            const resourceData = [
+                data.resourceUsage.cpu || 0,
+                data.resourceUsage.memory || 0,
+                data.resourceUsage.network || 0 // Assuming network is provided
             ];
+            this.charts.resource.data.datasets[0].data = resourceData;
             this.charts.resource.update();
+        }
+    },
 
-            // Update rate limits chart
-            this.charts.rateLimit.data.labels.push(time);
-            this.charts.rateLimit.data.datasets[0].data.push(data.apiCalls || 0);
-            if (this.charts.rateLimit.data.labels.length > 10) {
-                this.charts.rateLimit.data.labels.shift();
-                this.charts.rateLimit.data.datasets[0].data.shift();
+    // Starts the periodic fetching using the global fetch function
+    startUpdates() {
+        console.log(`Starting periodic dashboard updates every ${this.updateInterval / 1000}s`);
+        // Clear existing interval if any (safety measure)
+        if (this.intervalId) {
+            clearInterval(this.intervalId);
+        }
+        // Set up periodic updates using the central fetch function
+        this.intervalId = setInterval(fetchAndUpdateDashboardData, this.updateInterval);
+    }
+};
+
+// Renamed MetricsManager to OverviewManager for clarity
+const OverviewManager = {
+    elements: {}, // Cache DOM elements
+
+    init() {
+        // Cache elements on initialization
+        this.elements = {
+            activeAgents: document.getElementById('activeAgents'),
+            tasksCompleted: document.getElementById('tasksCompleted'),
+            successRate: document.getElementById('successRate'),
+            avgResponseTime: document.getElementById('avgResponseTime'),
+            // Add other potential overview elements if needed
+            totalEvents: document.getElementById('totalEvents'), 
+            blockedAttempts: document.getElementById('blockedAttempts'),
+            activeSessions: document.getElementById('activeSessions') 
+        };
+        // No longer starts its own interval here
+        console.log("OverviewManager initialized.");
+    },
+
+    // New function to update DOM elements from consolidated data
+    updateDOM(overviewData) {
+        if (!overviewData) {
+             console.warn("OverviewManager: No overview data received.");
+            return;
+        }
+        try {
+            // Update elements if they exist and data is provided
+            if (this.elements.activeAgents && overviewData.active_agents !== undefined) {
+                this.elements.activeAgents.textContent = overviewData.active_agents;
             }
-            this.charts.rateLimit.update();
-
-            // Update recent tasks table
-            this.updateRecentTasks(data.recentTasks || []);
+            if (this.elements.tasksCompleted && overviewData.tasks_completed !== undefined) {
+                this.elements.tasksCompleted.textContent = overviewData.tasks_completed;
+            }
+             if (this.elements.successRate && overviewData.success_rate !== undefined) {
+                // Ensure formatting consistency (e.g., always show %)
+                this.elements.successRate.textContent = `${parseFloat(overviewData.success_rate).toFixed(1)}%`;
+            }
+            if (this.elements.avgResponseTime && overviewData.response_time !== undefined) {
+                 // Ensure formatting consistency (e.g., always show ms)
+                this.elements.avgResponseTime.textContent = `${parseInt(overviewData.response_time)}ms`;
+            }
+             // Update security-related overview elements if present
+             if (this.elements.totalEvents && overviewData.total_events !== undefined) {
+                this.elements.totalEvents.textContent = overviewData.total_events;
+            }
+            if (this.elements.blockedAttempts && overviewData.blocked_attempts !== undefined) {
+                this.elements.blockedAttempts.textContent = overviewData.blocked_attempts;
+            }
+             if (this.elements.activeSessions && overviewData.active_sessions !== undefined) {
+                this.elements.activeSessions.textContent = overviewData.active_sessions;
+            }
 
         } catch (error) {
-            console.error('Error updating dashboard:', error);
-        }
-    },
-
-    updateRecentTasks(tasks) {
-        const tbody = document.getElementById('recentTasks');
-        if (!tbody) return;
-
-        tbody.innerHTML = tasks.map(task => `
-            <tr>
-                <td>${task.id}</td>
-                <td>${task.type}</td>
-                <td>${task.agent}</td>
-                <td><span class="badge badge-${this.getStatusClass(task.status)}">${task.status}</span></td>
-                <td>${task.duration}ms</td>
-                <td>${new Date(task.completed).toLocaleString()}</td>
-            </tr>
-        `).join('');
-    },
-
-    getStatusClass(status) {
-        switch (status?.toLowerCase()) {
-            case 'completed':
-                return 'success';
-            case 'in progress':
-                return 'warning';
-            case 'failed':
-                return 'danger';
-            default:
-                return 'secondary';
+            console.error("Error updating overview DOM:", error);
         }
     }
-}; 
+    // Removed async updateMetrics()
+};
+
+// Connection Manager (Modified retryConnection)
+const ConnectionManager = {
+    status: 'connecting',
+    checkInterval: window.UI_CONFIG?.CONNECTION_CHECK_INTERVAL || 10000, 
+    maxRetries: 3,
+    currentRetry: 0,
+    intervalId: null, // Store interval ID
+
+    init() {
+        this.updateStatus('connecting');
+        this.checkConnection(); // Initial check
+        
+        const retryBtn = document.getElementById('retry-connection');
+        if (retryBtn) {
+            retryBtn.addEventListener('click', () => this.retryConnection());
+        }
+
+        // Start periodic connection checks
+        if (this.intervalId) clearInterval(this.intervalId); // Clear previous if any
+        this.intervalId = setInterval(() => this.checkConnection(), this.checkInterval);
+         console.log(`Starting periodic connection checks every ${this.checkInterval / 1000}s`);
+    },
+
+    async checkConnection() {
+        // Check if API_CONFIG is ready
+        if (!window.API_CONFIG || !window.API_CONFIG.BASE_URL || !window.API_CONFIG.ENDPOINTS?.HEALTH) {
+             console.warn("Connection check skipped: API_CONFIG not fully loaded.");
+             // Optionally update status to 'error' or 'waiting'
+             // this.updateStatus('disconnected'); // Or a new 'pending_config' state
+             return false; 
+        }
+
+        try {
+            // Use a shorter timeout for health checks
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 5000); // 5-second timeout
+
+            const response = await fetch(`${window.API_CONFIG.BASE_URL}${window.API_CONFIG.ENDPOINTS.HEALTH}`, {
+                headers: window.API_CONFIG.HEADERS,
+                signal: controller.signal // Add abort signal
+            });
+            clearTimeout(timeoutId); // Clear timeout if fetch completes
+
+            if (response.ok) {
+                const data = await response.json();
+                if (data.status === 'ok' || data.status === 'healthy') {
+                    if (this.status !== 'connected') { // Only update if status changes
+                        this.updateStatus('connected');
+                         // Trigger initial data fetch on successful connection
+                         console.log("Connection successful, performing initial data fetch.");
+                         fetchAndUpdateDashboardData(); 
+                    }
+                    this.currentRetry = 0;
+                    return true;
+                }
+            }
+             // If response not ok or status not healthy
+             if (this.status !== 'disconnected') { // Only update if status changes
+                 this.updateStatus('disconnected');
+             }
+             console.warn(`Health check failed: Status ${response.status}`);
+            return false;
+        } catch (error) {
+             if (error.name === 'AbortError') {
+                 console.warn('Connection check timed out.');
+             } else {
+                 console.error('Connection check failed:', error);
+             }
+             if (this.status !== 'disconnected') { // Only update if status changes
+                this.updateStatus('disconnected');
+            }
+            return false;
+        }
+    },
+
+    async retryConnection() {
+        if (this.status === 'connecting') return; // Avoid multiple retries at once
+
+        if (this.currentRetry >= this.maxRetries) {
+            window.showToast('Maximum retry attempts reached. Please check backend status.', 'error');
+            this.updateStatus('disconnected'); // Ensure status reflects failure
+            return;
+        }
+
+        this.currentRetry++;
+        window.showToast(`Attempting to reconnect... (${this.currentRetry}/${this.maxRetries})`, 'info');
+        this.updateStatus('connecting');
+        
+        const connected = await this.checkConnection();
+        // Status is updated within checkConnection now
+        if (connected) {
+            window.showToast('Connection restored!', 'success');
+            // Initial data fetch is now handled by checkConnection on success
+        } else if (this.currentRetry >= this.maxRetries) {
+             window.showToast(`Failed to reconnect after ${this.maxRetries} attempts.`, 'error');
+             // Status will be 'disconnected' from checkConnection
+        }
+        // No need for explicit 'failed' toast here, checkConnection handles status
+    },
+
+    updateStatus(status) {
+        if (this.status === status) return; // Avoid redundant updates
+        this.status = status;
+        console.log("Connection status updated:", status);
+
+        const iconEl = document.getElementById('connection-icon');
+        const textEl = document.getElementById('connection-text');
+        const retryBtn = document.getElementById('retry-connection');
+        const statusPill = document.getElementById('connection-status-pill'); // Target the pill for class changes
+        
+        if (!iconEl || !textEl || !statusPill) {
+             console.error("Connection status elements not found in DOM.");
+             return;
+        }
+
+        // Remove previous status classes from pill
+         statusPill.classList.remove('status-connecting', 'status-connected', 'status-disconnected');
+
+        const statusConfig = {
+            connecting: {
+                iconClass: 'bi-arrow-repeat', // Rotating icon?
+                text: 'Connecting...',
+                pillClass: 'status-connecting',
+                showRetry: false
+            },
+            connected: {
+                iconClass: 'bi-check-circle-fill',
+                text: 'Connected',
+                pillClass: 'status-connected',
+                showRetry: false
+            },
+            disconnected: {
+                 iconClass: 'bi-exclamation-triangle-fill',
+                 text: 'Disconnected',
+                 pillClass: 'status-disconnected',
+                showRetry: this.currentRetry < this.maxRetries // Show retry only if attempts remain
+            }
+        };
+
+        const config = statusConfig[status];
+        if (config) {
+            iconEl.className = `bi ${config.iconClass}`; // Set icon class directly
+            textEl.textContent = config.text;
+            statusPill.classList.add(config.pillClass); // Add current status class
+            if (retryBtn) {
+                retryBtn.style.display = config.showRetry ? 'inline-block' : 'none';
+            }
+        }
+    }
+};
+
+// Agent control functions (Modified setAgentState)
+function initializeAgentControls() {
+    const pauseButton = document.getElementById('pauseAgents');
+    const resumeButton = document.getElementById('resumeAgents');
+    const idleButton = document.getElementById('idleAgents');
+
+    if (pauseButton) {
+        pauseButton.addEventListener('click', () => setAgentState('paused'));
+    }
+    if (resumeButton) {
+        resumeButton.addEventListener('click', () => setAgentState('active'));
+    }
+    if (idleButton) {
+        idleButton.addEventListener('click', () => setAgentState('idle'));
+    }
+    console.log("Agent controls initialized.");
+}
+
+async function setAgentState(state) {
+    console.log(`Attempting to set agent state to: ${state}`);
+    const endpoint = `${window.API_CONFIG.ENDPOINTS.AGENTS}/${state}`;
+    try {
+         // Use apiCall (from base.js) - expecting { data } or throws error
+         const { data } = await window.apiCall(endpoint, { method: 'PUT' });
+
+        // Assuming backend returns { message: "..." } on success
+        showToast('success', data.message || `Agents set to ${state}`);
+        // Trigger an immediate metrics update after changing state
+        fetchAndUpdateDashboardData(); 
+
+    } catch (error) {
+        console.error(`Error setting agent state to ${state}:`, error);
+        // Use error.message which might come from APIError in base.js
+        showToast('error', `Failed to set state: ${error.message || 'Unknown error'}`);
+    }
+}
+
+// --- Central Data Fetching Function (Adjusted) ---
+async function fetchAndUpdateDashboardData() {
+    // Ensure connection before fetching data
+    if (ConnectionManager.status !== 'connected') {
+        console.warn("Skipping data fetch: Not connected.");
+        return;
+    }
+    console.log("Fetching dashboard data...");
+    try {
+        // apiCall throws error on failure, returns { data } on success
+        const { data } = await window.apiCall(window.API_CONFIG.ENDPOINTS.METRICS);
+
+        if (data) {
+            console.log("Dashboard data received:", data);
+            // Assume API returns { overview: {...}, charts: {...} }
+            OverviewManager.updateDOM(data.overview || data); 
+            ChartsManager.updateAllCharts(data.charts || data); 
+        } else {
+             // This case might not be reached if apiCall always returns data or throws
+             console.warn('Fetched dashboard data but it was empty/null.');
+        }
+    } catch (error) {
+        console.error('Error fetching or updating dashboard data:', error);
+        // Log error but avoid flooding UI with toasts for background updates
+    }
+}
+
+
+// --- Initialization ---
+document.addEventListener('DOMContentLoaded', () => {
+    console.log("DOM Content Loaded. Initializing dashboard...");
+
+    if (!window.API_CONFIG || !window.API_CONFIG.ENDPOINTS) {
+        console.error('Dashboard: Required API_CONFIG or ENDPOINTS not found');
+        showToast('Dashboard initialization failed: API configuration missing.', 'error');
+        return;
+    }
+
+    // Initialize components only once
+    if (!window.dashboardInitialized) {
+        try {
+            console.log("Initializing managers...");
+            DashboardTheme.init();    // Theme first
+            OverviewManager.init(); // Caches elements
+            ChartsManager.init();   // Creates chart instances
+            ConnectionManager.init(); // Starts connection checks, triggers first fetch on success
+            initializeAgentControls();
+
+            // Start periodic updates AFTER initialization and first connection
+            // ConnectionManager now triggers the first fetchAndUpdateDashboardData on success
+            // ChartsManager.startUpdates() sets the interval for subsequent fetches
+            ChartsManager.startUpdates(); 
+            
+            window.dashboardInitialized = true;
+            console.log("Dashboard initialized successfully.");
+
+        } catch (error) {
+            console.error('Error during dashboard initialization:', error);
+            showToast('Error initializing dashboard components. Check console.', 'error');
+        }
+    } else {
+        console.log("Dashboard already initialized.");
+    }
+});
+
+// Helper function to show toast notifications
+function showToast(type = 'info', message) {
+    const toast = document.createElement('div');
+    toast.className = `toast align-items-center text-white bg-${type} border-0`;
+    toast.setAttribute('role', 'alert');
+    toast.setAttribute('aria-live', 'assertive');
+    toast.setAttribute('aria-atomic', 'true');
+    
+    toast.innerHTML = `
+        <div class="d-flex">
+            <div class="toast-body">${message}</div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+    `;
+    
+    const container = document.getElementById('toast-container') || document.body;
+    container.appendChild(toast);
+    
+    const bsToast = new bootstrap.Toast(toast, {
+        autohide: true,
+        delay: window.UI_CONFIG.TOAST_DURATION
+    });
+    bsToast.show();
+    
+    // Remove the toast element after it's hidden
+    toast.addEventListener('hidden.bs.toast', () => toast.remove());
+}
+
+// REMOVED REDUNDANT apiCall FUNCTION
+
+// Redundant functions below this line should also be reviewed/removed if they duplicate base.js
+// function initializeCharts() { ... } 
+// function updateRateLimitChart(data) { ... }
+
+// ... existing code ... 
