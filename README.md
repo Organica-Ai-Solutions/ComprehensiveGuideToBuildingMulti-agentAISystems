@@ -143,7 +143,7 @@ The backend is built with FastAPI and provides a RESTful API for interacting wit
    python main.py
    ```
 
-The server will start on `http://localhost:8000`. You can access the API documentation at `http://localhost:8000/docs`.
+The server will start on `http://localhost:5000`. You can access the API documentation at `http://localhost:5000/docs`.
 
 ### Testing the API
 
@@ -151,18 +151,18 @@ You can test the endpoints using curl:
 
 ```bash
 # List all agents
-curl http://localhost:8000/api/agents
+curl http://localhost:5000/api/agents
 
 # Get specific agent
-curl http://localhost:8000/api/agents/1
+curl http://localhost:5000/api/agents/1
 
 # Chat with an agent
-curl -X POST http://localhost:8000/api/agents/1/chat \
+curl -X POST http://localhost:5000/api/agents/1/chat \
   -H "Content-Type: application/json" \
   -d '{"content": "Hello, can you help me with research?"}'
 
 # Get system metrics
-curl http://localhost:8000/api/metrics
+curl http://localhost:5000/api/metrics
 ```
 
 ## Frontend Implementation

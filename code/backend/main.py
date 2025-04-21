@@ -2,7 +2,7 @@
 Main backend application module.
 """
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, WebSocket, Body, Depends, Request, WebSocketDisconnect, status, Response
+from fastapi import FastAPI, HTTPException, WebSocket, Body, Depends, Request, WebSocketDisconnect, status, Response, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import APIKeyHeader
 from fastapi.websockets import WebSocketState
@@ -28,10 +28,92 @@ from langchain_core.tools import Tool
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain.memory import ConversationBufferMemory
+from database import SessionLocal, init_db, Agent as DBAgent, Message as DBMessage, Tool as DBTool, Conversation as DBConversation
+from database import AgentStatusEnum, MessageTypeEnum
+import uuid
+from utils.config_loader import config_loader
 
 # Initialize logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Load configuration
+config = config_loader.get_config()
+
+# Load the backend access key from environment variables
+BACKEND_ACCESS_KEY = os.getenv("BACKEND_ACCESS_KEY")
+logger.info(f"Loaded BACKEND_ACCESS_KEY: {'********' if BACKEND_ACCESS_KEY else 'Not Set'}")
+if not BACKEND_ACCESS_KEY:
+    logger.warning("BACKEND_ACCESS_KEY environment variable not set. API endpoints requiring a key may be unprotected.")
+
+# Define the API Key Header scheme
+API_KEY_HEADER = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+async def verify_api_key(api_key_header: str = Depends(API_KEY_HEADER)):
+    """Dependency function to verify the provided API key."""
+    # If BACKEND_ACCESS_KEY is not set in the environment, skip verification (less secure)
+    if not BACKEND_ACCESS_KEY:
+        # logger.warning("Skipping API key verification as BACKEND_ACCESS_KEY is not set.")
+        return
+        
+    if not api_key_header:
+        logger.warning("Missing X-API-Key header.")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing API Key",
+        )
+    if api_key_header != BACKEND_ACCESS_KEY:
+        logger.warning("Invalid API Key received.")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid API Key",
+        )
+    # Key is valid
+    logger.debug("Valid API Key received.")
+
+class MCPMetrics:
+    def __init__(self):
+        system_config = config['system']
+        self.total_tokens = 0
+        self.active_roles = set()
+        self.total_messages = 0
+        self.memory_objects = 0
+        self.context_history = []
+        self.max_tokens = system_config['safety']['max_tokens_per_request']
+        self.last_update = datetime.now()
+        self.update_interval = system_config['metrics']['update_interval']
+        self.max_history_points = system_config['metrics']['history_points']
+
+    def update_metrics(self, agents_data, messages_data):
+        """Update all metrics based on current system state"""
+        self.active_roles = {agent.role for agent in agents_data.values() if agent.status == 'active'}
+        self.total_messages = len(messages_data)
+        self.total_tokens = sum(msg.token_count for msg in messages_data.values())
+        self.memory_objects = len(agents_data)
+        
+        current_time = datetime.now()
+        if (current_time - self.last_update).seconds >= self.update_interval:
+            self.context_history.append({
+                'timestamp': current_time.isoformat(),
+                'tokens_used': self.total_tokens
+            })
+            if len(self.context_history) > self.max_history_points:
+                self.context_history.pop(0)
+            self.last_update = current_time
+
+    def get_metrics(self):
+        """Get current metrics"""
+        return {
+            'roles': len(self.active_roles),
+            'messages': self.total_messages,
+            'memory_objects': self.memory_objects,
+            'context': {
+                'total_tokens': self.total_tokens,
+                'max_tokens': self.max_tokens,
+                'usage_percentage': (self.total_tokens / self.max_tokens) * 100 if self.max_tokens > 0 else 0,
+                'history': self.context_history
+            }
+        }
 
 # Import tools
 try:
@@ -111,7 +193,7 @@ async def lifespan(app: FastAPI):
     """Lifespan context manager for FastAPI application"""
     # Startup
     logger.info("Initializing application...")
-    initialize_sample_data()
+    await startup_event()
     logger.info("Application initialized")
     yield
     # Shutdown
@@ -126,16 +208,14 @@ app = FastAPI(
 # Initialize connection manager for WebSocket connections
 manager = ConnectionManager()
 
-# Add security headers
-API_KEY = APIKeyHeader(name="X-API-Key", auto_error=False)
-
 # Configure CORS from config
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for debugging
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"], # Specify allowed origins explicitly
     allow_credentials=True,
     allow_methods=["*"],  # Allow all methods
     allow_headers=["*"],  # Allow all headers
+    # expose_headers=["*"] # expose_headers might not be needed unless specific headers must be read by JS
 )
 
 # Load environment variables
@@ -164,12 +244,31 @@ metrics = []
 active_connections = {}
 conversation_history = {}
 agent_handoffs = {}
+mcp_metrics = MCPMetrics()  # Initialize MCP metrics
 
 # System configuration
 context_history = []
 MAX_CONTEXT_SIZE = config['system']['max_context_size']
 MAX_MESSAGE_LENGTH = config['system']['max_message_length']
 MAX_CONVERSATION_HISTORY = config['system']['max_conversation_history']
+
+# Initialize default agent
+default_agent = DBAgent(
+    id="default_agent",
+    name="AI Assistant",
+    role="assistant",
+    goal="Help users with general tasks, questions, and provide informative responses",
+    capabilities=[
+        "general_assistance",
+        "task_management",
+        "code_help",
+        "research"
+    ],
+    status=AgentStatusEnum.ACTIVE
+)
+agents["default_agent"] = default_agent
+conversation_history["default_agent"] = []
+logger.info("Initialized default agent")
 
 # Agent route request model
 class RouteRequest(BaseModel):
@@ -203,53 +302,6 @@ class ToolRequest(BaseModel):
     content: str
     agent_id: str
     confirmed: Optional[bool] = False
-
-class MCPMetrics:
-    def __init__(self):
-        system_config = config['system']
-        self.total_tokens = 0
-        self.active_roles = set()
-        self.total_messages = 0
-        self.memory_objects = 0
-        self.context_history = []
-        self.max_tokens = system_config['safety']['max_tokens_per_request']
-        self.last_update = datetime.now()
-        self.update_interval = system_config['metrics']['update_interval']
-        self.max_history_points = system_config['metrics']['history_points']
-
-    def update_metrics(self, agents_data, messages_data):
-        """Update all metrics based on current system state"""
-        self.active_roles = {agent.role for agent in agents_data.values() if agent.status == 'active'}
-        self.total_messages = len(messages_data)
-        self.total_tokens = sum(msg.token_count for msg in messages_data.values())
-        self.memory_objects = len(agents_data)
-        
-        current_time = datetime.now()
-        if (current_time - self.last_update).seconds >= self.update_interval:
-            self.context_history.append({
-                'timestamp': current_time.isoformat(),
-                'tokens_used': self.total_tokens
-            })
-            if len(self.context_history) > self.max_history_points:
-                self.context_history.pop(0)
-            self.last_update = current_time
-
-    def get_metrics(self):
-        """Get current metrics"""
-        return {
-            'roles': len(self.active_roles),
-            'messages': self.total_messages,
-            'memory_objects': self.memory_objects,
-            'context': {
-                'total_tokens': self.total_tokens,
-                'max_tokens': self.max_tokens,
-                'usage_percentage': (self.total_tokens / self.max_tokens) * 100 if self.max_tokens > 0 else 0,
-                'history': self.context_history
-            }
-        }
-
-# Initialize MCP metrics
-mcp_metrics = MCPMetrics()
 
 # Model classes
 class AgentStatus(str, Enum):
@@ -358,11 +410,13 @@ class ChatResponse(BaseModel):
     files_received: Optional[List[str]] = None
 
 # Initialize sample data
-def initialize_sample_data():
+async def initialize_sample_data():
     """Initialize sample agents and tools from configuration"""
     try:
-        # Initialize default agent first with clear capabilities and instructions
-        default_agent = Agent(
+        db = SessionLocal()
+        
+        # Initialize default agent
+        default_agent = DBAgent(
             id="default_agent",
             name="AI Assistant",
             role="assistant",
@@ -373,59 +427,66 @@ def initialize_sample_data():
                 "code_help",
                 "research"
             ],
-            status=AgentStatus.ACTIVE,  # Explicitly use AgentStatus enum
-            created_at=datetime.now()
+            status=AgentStatusEnum.ACTIVE
         )
-        agents["default_agent"] = default_agent
-        conversation_history["default_agent"] = []
-        logger.info("Initialized default agent")
-
+        
+        # Check if default agent exists
+        existing_agent = db.query(DBAgent).filter(DBAgent.id == "default_agent").first()
+        if not existing_agent:
+            db.add(default_agent)
+            logger.info("Initialized default agent")
+        
         # Initialize specialized agents based on configured roles
         agent_roles = config['agents']['roles']
         for role_id, role_config in agent_roles.items():
             try:
                 agent_id = f"{role_id}_agent"
-                if agent_id != "default_agent":  # Skip if it's the default agent we already created
-                    agent = Agent(
-                        id=agent_id,
-                        name=role_id.capitalize(),
-                        role=role_id,
-                        goal=role_config['goal'],
-                        capabilities=role_config['capabilities'],
-                        status=AgentStatus.ACTIVE,  # Explicitly use AgentStatus enum
-                        created_at=datetime.now()
-                    )
-                    agents[agent_id] = agent
-                    conversation_history[agent_id] = []
-                    logger.info(f"Initialized specialized agent: {agent_id}")
+                if agent_id != "default_agent":
+                    # Check if agent exists
+                    existing_agent = db.query(DBAgent).filter(DBAgent.id == agent_id).first()
+                    if not existing_agent:
+                        agent = DBAgent(
+                            id=agent_id,
+                            name=role_id.capitalize(),
+                            role=role_id,
+                            goal=role_config['goal'],
+                            capabilities=role_config['capabilities'],
+                            status=AgentStatusEnum.ACTIVE
+                        )
+                        db.add(agent)
+                        logger.info(f"Initialized specialized agent: {agent_id}")
             except Exception as e:
                 logger.error(f"Error initializing agent {role_id}: {str(e)}")
                 continue
-
-        logger.info(f"Initialized {len(agents)} agents with enhanced configurations")
+        
+        db.commit()
+        logger.info(f"Initialized agents with enhanced configurations")
     except Exception as e:
         logger.error(f"Error in initialize_sample_data: {str(e)}")
+        db.rollback()
         raise
+    finally:
+        db.close()
 
 # API Endpoints
 @app.get("/api/agents")
 @app.head("/api/agents")
-async def get_agents(api_key: str = Depends(API_KEY)):
+async def get_agents(api_key: None = Depends(verify_api_key)):
     return list(agents.values())
 
 @app.get("/api/agents/{agent_id}", response_model=Agent)
-async def get_agent(agent_id: str):
+async def get_agent(agent_id: str, api_key: None = Depends(verify_api_key)):
     if agent_id not in agents:
         raise HTTPException(status_code=404, detail="Agent not found")
     return agents[agent_id]
 
 @app.get("/api/tools", response_model=List[Tool])
 @app.head("/api/tools")
-async def get_tools():
+async def get_tools(api_key: None = Depends(verify_api_key)):
     return list(tools.values())
 
 @app.get("/api/agents/{agent_id}/messages", response_model=List[MessageInDB])
-async def get_agent_messages(agent_id: str):
+async def get_agent_messages(agent_id: str, api_key: None = Depends(verify_api_key)):
     agent_messages = [msg for msg in messages.values() if msg.agent_id == agent_id]
     return sorted(agent_messages, key=lambda x: x.timestamp)
 
@@ -467,7 +528,7 @@ async def process_message(agent_id: str, data: dict):
             token_count = len(content.split())
             
             logger.info(f"Processing user message: {content}")
-            
+
             # Create user message
             msg_id = str(len(messages) + 1)
             user_msg = MessageInDB(
@@ -716,105 +777,117 @@ async def messages_options():
     return {}  # Return empty dict for OPTIONS request
 
 @app.post("/api/chat", response_model=ChatResponse)
-async def chat_endpoint(request: ChatMessageRequest):
+async def chat_endpoint(request: ChatMessageRequest, api_key: None = Depends(verify_api_key)):
     try:
+        db = SessionLocal()
+        logger.debug(f"Chat endpoint entered for request: {request}")
+        
         # Use default agent if none specified
         selected_agent_id = request.agent_id or "default_agent"
-        logger.info(f"Received chat request for agent: {selected_agent_id}")
+        logger.debug(f"Selected agent ID: {selected_agent_id}")
         
         # Validate agent exists
-        if selected_agent_id not in agents:
-            raise HTTPException(status_code=404, detail="Agent not found")
-        
-        # Handle conversation ID and history
-        conversation_id = request.conversation_id or f"conv_{datetime.now().timestamp()}"
-        if conversation_id not in conversation_history:
-            conversation_history[conversation_id] = []
-            logger.info(f"Started new conversation: {conversation_id}")
-        
-        history = conversation_history[conversation_id]
-        logger.debug(f"Retrieved history for {conversation_id} (length: {len(history)})")
-
-        # Store user message in history
-        user_message_entry = {
-            "sender": "user",
-            "content": request.message,
-            "timestamp": datetime.now().isoformat()
-        }
-        if request.files:
-            user_message_entry["files"] = [f.filename for f in request.files]
-        history.append(user_message_entry)
-
-        # Process through agent
-        result = await process_agent_request(
-            agent_id=selected_agent_id,
-            message=request.message,
-            conversation_id=conversation_id,
-            history=history,
-            files=request.files
-        )
-
-        # Store agent response in history
-        agent_reply_entry = {
-            "sender": "agent",
-            "content": result["reply"],
-            "timestamp": datetime.now().isoformat()
-        }
-        history.append(agent_reply_entry)
-
-        # Convert reasoning steps to proper format
-        reasoning_steps = []
-        for step in result.get("reasoning_steps", []):
-            if isinstance(step, dict):
-                # Ensure the step has a description field
-                description = step.get("description")
-                if not description:
-                    # If no description, try to get it from content or create one
-                    description = step.get("content", "Processing step")
-                    if "step_number" in step:
-                        description = f"Step {step['step_number']}: {description}"
-                
-                reasoning_steps.append(ReasoningStep(
-                    description=description,
-                    type=step.get("type", "thinking")
-                ))
-            elif isinstance(step, ReasoningStep):
-                reasoning_steps.append(step)
-
-        # Create and return the response
-        response = ChatResponse(
-            reply=result["reply"],
-            reasoning=reasoning_steps,
-            tool_usage=result.get("tool_usage", []),
-            conversation_id=conversation_id,
-            agent_id=selected_agent_id,
-            files_received=[f.filename for f in request.files] if request.files else None
-        )
-        
-        # Update conversation history
-        conversation_history[conversation_id] = history
-        
-        return response
-
-    except Exception as e:
-        logger.error(f"Error in chat endpoint: {str(e)}")
-        # Create error response with proper reasoning steps
-        error_steps = [
-            ReasoningStep(
-                description=f"Error occurred while processing request: {str(e)}",
-                type="error"
+        agent = db.query(DBAgent).filter(DBAgent.id == selected_agent_id).first()
+        if not agent:
+            logger.error(f"Agent {selected_agent_id} not found")
+            error_steps = [
+                ReasoningStep(
+                    description=f"Error: Agent {selected_agent_id} not found",
+                    type="error"
+                )
+            ]
+            return ChatResponse(
+                reply="Agent not found. Using default agent instead.",
+                reasoning=error_steps,
+                tool_usage=[],
+                conversation_id=f"conv_{datetime.now().timestamp()}",
+                agent_id="default_agent"
             )
-        ]
-        return ChatResponse(
-            reply=f"Failed to process chat request: {str(e)}",
-            reasoning=error_steps,
-            tool_usage=[],
+        
+        # Handle conversation
+        conversation_id = request.conversation_id or f"conv_{datetime.now().timestamp()}"
+        logger.debug(f"Conversation ID: {conversation_id}")
+        
+        # Get or create conversation
+        conversation = db.query(DBConversation).filter(
+            DBConversation.id == conversation_id
+        ).first()
+        
+        if not conversation:
+            logger.debug("Creating new conversation entry")
+            conversation = DBConversation(
+                id=conversation_id,
+                agent_id=selected_agent_id,
+                context_data={} # Use context_data instead of conversation_metadata
+            )
+            db.add(conversation)
+        else:
+            logger.debug("Found existing conversation entry")
+        
+        # Create user message
+        logger.debug("Creating user message entry")
+        user_message = DBMessage(
+            id=str(uuid.uuid4()),
+            agent_id=selected_agent_id,
+            content=request.message,
+            sender="user",
             conversation_id=conversation_id,
-            agent_id=selected_agent_id
+            message_type=MessageTypeEnum.TEXT
         )
+        db.add(user_message)
+        logger.debug("User message entry added to session")
+        
+        # Generate response using the existing process_agent_request function
+        logger.debug("Calling process_agent_request")
+        response_dict = await process_agent_request(
+            selected_agent_id,
+            request.message,
+            conversation_id,
+            [],  # We'll implement history retrieval later
+            request.files
+        )
+        logger.debug(f"Received response from process_agent_request: {response_dict}")
+        
+        # Create agent message
+        logger.debug("Creating agent message entry")
+        agent_message = DBMessage(
+            id=str(uuid.uuid4()),
+            agent_id=selected_agent_id,
+            content=response_dict["reply"], # Use response_dict
+            sender="agent",
+            conversation_id=conversation_id,
+            message_type=MessageTypeEnum.TEXT
+        )
+        db.add(agent_message)
+        logger.debug("Agent message entry added to session")
+        
+        # Commit changes
+        logger.debug("Attempting database commit")
+        db.commit()
+        logger.debug("Database commit successful")
+        
+        # Prepare and return response
+        logger.debug("Preparing ChatResponse object")
+        chat_response = ChatResponse(**response_dict) # Use response_dict
+        logger.debug("ChatResponse object created, returning response")
+        return chat_response
+        
+    except Exception as e:
+        logger.error(f"Error in chat endpoint: {str(e)}", exc_info=True) # Add exc_info=True for full traceback
+        db.rollback()
+        # Reraise the exception to ensure FastAPI returns a 500 error properly
+        # raise HTTPException(status_code=500, detail="Internal server error") # Alternative: specific HTTP error
+        raise
+    finally:
+        logger.debug("Closing database session")
+        db.close()
+
+@app.options("/api/chat")
+async def chat_options():
+    return Response(status_code=200)
 
 @app.get("/api/metrics")
-async def get_metrics():
+async def get_metrics(api_key: None = Depends(verify_api_key)):
     """Get system metrics including MCP data for the dashboard"""
     # Update MCP metrics with current system state
     mcp_metrics.update_metrics(agents, messages)
@@ -846,29 +919,21 @@ async def metrics_options():
 
 @app.get("/api/health")
 async def health_check():
+    """Health check endpoint"""
     try:
-        process = psutil.Process()
-        start_time = datetime.fromtimestamp(process.create_time())
-        uptime = (datetime.now() - start_time).total_seconds()
-        
         return {
             "status": "healthy",
             "timestamp": datetime.now().isoformat(),
-            "version": config['api']['version'],
-            "uptime": uptime,
-            "environment": "development"
+            "version": config['api']['version']
         }
     except Exception as e:
         logger.error(f"Health check failed: {str(e)}")
-        return {
-            "status": "unhealthy",
-            "error": str(e),
-            "timestamp": datetime.now().isoformat()
-        }
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.options("/api/health")
 async def health_check_options():
-    return {}
+    """Handle OPTIONS requests for the health endpoint"""
+    return Response(status_code=200)
 
 @app.put("/api/agents/{state}")
 async def update_agents_state(state: str):
@@ -1228,11 +1293,22 @@ async def process_tool_request(tool_request, websocket):
             "error": str(e)
         }
 
-# Initialize sample data on startup
+# Initialize database on startup
 @app.on_event("startup")
 async def startup_event():
-    initialize_sample_data()
-    logger.info("Application startup complete")
+    try:
+        # Initialize database
+        init_db()
+        logger.info("Database initialized successfully")
+        
+        # Initialize sample data
+        await initialize_sample_data()
+        logger.info("Sample data initialized successfully")
+        
+        logger.info("Application startup complete")
+    except Exception as e:
+        logger.error(f"Error during startup: {str(e)}")
+        raise
 
 async def process_agent_request(agent_id: str, message: str, conversation_id: str, history: List[Dict], files: Optional[List[FileData]] = None) -> Dict[str, Any]:
     """Process the user request using real agent logic with LangChain."""
@@ -1242,26 +1318,28 @@ async def process_agent_request(agent_id: str, message: str, conversation_id: st
         # Initialize response structure with properly formatted reasoning steps
         response = {
             "reply": "",
-            "reasoning_steps": [],
+            "reasoning": [],
             "tool_usage": []
         }
         
         # Basic input validation
         if not message or len(message.strip()) == 0:
             response["reply"] = "I'm here to help! What would you like to discuss?"
-            response["reasoning_steps"] = [
+            response["reasoning"] = [
                 ReasoningStep(
                     description="Received empty message, responding with greeting",
                     type="thinking"
                 )
             ]
+            # Add conversation_id before returning
+            response["conversation_id"] = conversation_id
             return response
             
         # Process files if present
         if files:
             for file in files:
                 logger.info(f"Processing file: {file.filename}")
-                response["reasoning_steps"].append(
+                response["reasoning"].append(
                     ReasoningStep(
                         description=f"Processing attached file: {file.filename}",
                         type="thinking"
@@ -1277,7 +1355,7 @@ async def process_agent_request(agent_id: str, message: str, conversation_id: st
         logger.info(f"[Agent Process] Processing request using {agent.role}")
         
         # Add initial processing step
-        response["reasoning_steps"].append(
+        response["reasoning"].append(
             ReasoningStep(
                 description=f"Processing request using {agent.role} capabilities",
                 type="thinking"
@@ -1285,35 +1363,49 @@ async def process_agent_request(agent_id: str, message: str, conversation_id: st
         )
         
         # Generate response based on agent role
-        if agent.role == "researcher":
-            response["reasoning_steps"].append(
-                ReasoningStep(
-                    description="Analyzing query for research requirements and formulating response",
-                    type="thinking"
-                )
+        # --- Start Original Code (Commented Out) ---
+        # if agent.role == "researcher":
+        #     response["reasoning"].append(
+        #         ReasoningStep(
+        #             description="Analyzing query for research requirements and formulating response",
+        #             type="thinking"
+        #         )
+        #     )
+        #     response["reply"] = "I am Research Assistant, how can I help with your research?"
+        #     
+        # elif agent.role == "coder":
+        #     response["reasoning"].append(
+        #         ReasoningStep(
+        #             description="Analyzing query for coding assistance and preparing response",
+        #             type="thinking"
+        #         )
+        #     )
+        #     response["reply"] = "I am Code Assistant, how can I help with your code?"
+        #     
+        # else:
+        #     response["reasoning"].append(
+        #         ReasoningStep(
+        #             description="Generating general assistance response based on user query",
+        #             type="thinking"
+        #         )
+        #     )
+        #     response["reply"] = "I am AI Assistant, how can I assist you?"
+        # --- End Original Code ---
+        
+        # --- Start New Code (Echo Response) ---
+        # Placeholder: Echo the received message for now.
+        # TODO: Replace this with actual agent logic (e.g., LLM call)
+        response["reply"] = f"Received your message: '{message}'"
+        response["reasoning"].append(
+            ReasoningStep(
+                description=f"Echoing user message: '{message}'",
+                type="thinking"
             )
-            response["reply"] = "I am Research Assistant, how can I help with your research?"
-            
-        elif agent.role == "coder":
-            response["reasoning_steps"].append(
-                ReasoningStep(
-                    description="Analyzing query for coding assistance and preparing response",
-                    type="thinking"
-                )
-            )
-            response["reply"] = "I am Code Assistant, how can I help with your code?"
-            
-        else:
-            response["reasoning_steps"].append(
-                ReasoningStep(
-                    description="Generating general assistance response based on user query",
-                    type="thinking"
-                )
-            )
-            response["reply"] = "I am AI Assistant, how can I assist you?"
-            
+        )
+        # --- End New Code ---
+        
         # Add final processing step
-        response["reasoning_steps"].append(
+        response["reasoning"].append(
             ReasoningStep(
                 description="Generated and validated response for user query",
                 type="thinking"
@@ -1323,6 +1415,10 @@ async def process_agent_request(agent_id: str, message: str, conversation_id: st
         # Log the response for debugging
         logger.info(f"[Agent Process] Generated response: {response['reply']}")
         
+        # Add conversation_id before returning
+        response["conversation_id"] = conversation_id
+        response["agent_id"] = agent_id
+
         # Broadcast the response through websocket if available
         await broadcast_response(agent_id, message, response)
         
@@ -1330,16 +1426,37 @@ async def process_agent_request(agent_id: str, message: str, conversation_id: st
         
     except Exception as e:
         logger.error(f"Error in process_agent_request: {str(e)}")
+        # Return a dictionary compatible with ChatResponse even on error
         return {
             "reply": f"Error processing request: {str(e)}",
-            "reasoning_steps": [
+            "reasoning": [
                 ReasoningStep(
                     description=f"Error occurred while processing request: {str(e)}",
                     type="error"
-                )
+                ).dict()
             ],
-            "tool_usage": []
+            "tool_usage": [],
+            "conversation_id": conversation_id,
+            "agent_id": agent_id
         }
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="127.0.0.1", port=5000, reload=True) 
+    import argparse
+    import uvicorn
+
+    parser = argparse.ArgumentParser(description="Run the FastAPI backend server.")
+    parser.add_argument("--host", type=str, default="0.0.0.0", help="Host to bind the server to.")
+    parser.add_argument("--port", type=int, default=5001, help="Port to bind the server to.")
+    parser.add_argument("--reload", action="store_true", help="Enable auto-reload.")
+    parser.add_argument("--no-reload", dest="reload", action="store_false", help="Disable auto-reload.")
+    parser.set_defaults(reload=False) # Default is no reload unless --reload is specified
+
+    args = parser.parse_args()
+
+    # Ensure log directory exists if file logging is enabled
+    # Note: Assuming config is loaded before this point if file logging path depends on it.
+    # If not, this logic might need adjustment or placement after config load.
+    # Example: Check if config['logging']['handlers']['file']['enabled'] and create dir if needed
+
+    print(f"Starting server on {args.host}:{args.port} with reload={'enabled' if args.reload else 'disabled'}")
+    uvicorn.run("main:app", host=args.host, port=args.port, reload=args.reload) 

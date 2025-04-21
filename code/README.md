@@ -164,7 +164,7 @@ The system includes a convenient startup script that launches all components in 
 
 4. Access the application:
    - Frontend: http://localhost:3000
-   - Backend API: http://localhost:8000
+   - Backend API: http://localhost:5000
 
 ### Troubleshooting
 
@@ -172,7 +172,7 @@ If you encounter issues:
 
 1. Check component logs in the `logs/` directory
 2. Ensure all required environment variables are set
-3. Verify all ports are available (3000 for frontend, 8000 for backend)
+3. Verify all ports are available (3000 for frontend, 5000 for backend)
 4. Make sure all dependencies are installed
 5. Check if the MCP server and client are running properly
 

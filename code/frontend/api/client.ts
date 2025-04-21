@@ -1,6 +1,6 @@
 import { Agent, Message, Task, ApiResponse } from '../interfaces';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
 export class ApiClient {
   private async request<T>(
@@ -8,7 +8,7 @@ export class ApiClient {
     method: string = 'GET', 
     data?: any
   ): Promise<ApiResponse<T>> {
-    const url = `${API_BASE_URL}${endpoint}`;
+    const url = `${baseUrl}${endpoint}`;
     const options: RequestInit = {
       method,
       headers: {

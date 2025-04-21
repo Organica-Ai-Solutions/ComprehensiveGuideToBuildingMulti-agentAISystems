@@ -7,8 +7,8 @@ from datetime import datetime
 
 class TestAPIEndpoints(unittest.TestCase):
     def setUp(self):
-        self.base_url = "http://localhost:8000"
-        self.ws_url = "ws://localhost:8000"
+        self.base_url = "http://localhost:5000"
+        self.ws_url = "ws://localhost:5000"
         
     def test_health_check(self):
         """Test the health check endpoint"""

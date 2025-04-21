@@ -13,9 +13,23 @@ class MetricsDisplay {
 
     async refreshMetrics() {
         try {
-            const response = await fetch('http://localhost:8000/api/metrics');
-            this.metrics = await response.json();
+            // Use the global apiCall function from base.js
+            // It handles base URL, API key, and error formatting
+            if (typeof window.apiCall !== 'function') {
+                throw new Error("apiCall function not available. Ensure base.js is loaded.");
+            }
+
+            // apiCall returns { data } on success or throws APIError
+            const { data } = await window.apiCall(window.API_CONFIG.ENDPOINTS.METRICS, window.API_CONFIG);
+            this.metrics = data; // Assuming data is the metrics object
             this.updateDisplays();
+
+            // Hide error if previously shown
+            const errorAlert = document.getElementById('metricsError');
+            if (errorAlert) {
+                errorAlert.classList.add('d-none');
+            }
+
         } catch (error) {
             console.error('Failed to fetch metrics:', error);
             const errorAlert = document.getElementById('metricsError');

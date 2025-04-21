@@ -36,7 +36,7 @@ sleep 2
 # 3. Start the Backend Server (main.py)
 echo -e "${GREEN}Starting Backend Server...${NC}"
 cd code/backend
-python main.py > ../../logs/backend.log 2>&1 &
+python main.py --port 5001 --no-reload > ../../logs/backend.log 2>&1 &
 BACKEND_PID=$!
 cd ../..
 echo "Backend Server started with PID: $BACKEND_PID"

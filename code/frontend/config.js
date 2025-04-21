@@ -1,7 +1,7 @@
 // API Configuration
 const config = {
-    API_BASE_URL: 'http://127.0.0.1:5000',
-    WS_BASE_URL: 'ws://127.0.0.1:5000',
+    API_BASE_URL: 'http://127.0.0.1:5002',
+    WS_BASE_URL: 'ws://127.0.0.1:5002',
     headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json'

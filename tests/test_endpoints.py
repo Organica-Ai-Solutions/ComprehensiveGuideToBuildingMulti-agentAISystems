@@ -7,8 +7,10 @@ import aiohttp
 
 class TestAPIEndpoints(unittest.TestCase):
     def setUp(self):
-        self.base_url = "http://localhost:8000"
-        self.ws_url = "ws://localhost:8000"
+        self.base_url = "http://localhost:5001"
+        self.ws_url = "ws://localhost:5001"
+        self.test_message = "Hello, test message"
+        self.test_agent = "researcher"
         
     async def test_websocket_connection(self):
         """Test WebSocket connection"""

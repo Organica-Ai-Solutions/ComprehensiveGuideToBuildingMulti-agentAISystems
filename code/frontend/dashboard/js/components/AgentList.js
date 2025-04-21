@@ -15,7 +15,7 @@ class AgentList {
 
     async refreshAgents() {
         try {
-            const response = await fetch('http://localhost:8000/api/agents');
+            const response = await fetch('http://localhost:5000/api/agents');
             if (!response.ok) throw new Error('Failed to fetch agents');
             
             this.agents = await response.json();

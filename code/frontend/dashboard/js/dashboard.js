@@ -3,8 +3,8 @@ const DashboardTheme = {
     init() {
         this.themeToggle = document.getElementById('theme-toggle');
         if (this.themeToggle) {
-            this.themeToggle.addEventListener('click', () => this.toggleTheme());
-            this.loadTheme();
+        this.themeToggle.addEventListener('click', () => this.toggleTheme());
+        this.loadTheme();
         }
     },
 
@@ -371,7 +371,7 @@ const OverviewManager = {
              if (this.elements.activeSessions && overviewData.active_sessions !== undefined) {
                 this.elements.activeSessions.textContent = overviewData.active_sessions;
             }
-
+            
         } catch (error) {
             console.error("Error updating overview DOM:", error);
         }

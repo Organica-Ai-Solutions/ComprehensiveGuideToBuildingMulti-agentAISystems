@@ -221,7 +221,7 @@ def generate_agent_response(agent: Agent, user_message: str) -> str:
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="localhost", port=8000)
+    uvicorn.run(app, host="localhost", port=5000)
 ```
 
 This implementation provides:
@@ -572,7 +572,7 @@ The challenge of maintaining state in serverless environments can be addressed t
 
 As you move your agent system to production, focus on creating architectures that are resilient, observable, and cost-effective. By following the patterns and best practices outlined in this chapter, you can successfully deploy multi-agent AI systems that scale reliably and provide value to users.
 
-*Note: Citation numbers [X] refer to the "Obras citadas" section in the bibliography.*
+*Note: Citation numbers [X] refer to the "Obras citadas" section in the bibliography.* 
 
 ## Model Context Protocol Integration
 
