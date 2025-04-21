@@ -577,7 +577,8 @@ async function fetchAndUpdateDashboardData() {
     console.log("Fetching dashboard data...");
     try {
         // apiCall throws error on failure, returns { data } on success
-        const { data } = await window.apiCall(window.API_CONFIG.ENDPOINTS.METRICS);
+        // Pass API_CONFIG as the second argument for apiCall to add headers
+        const { data } = await window.apiCall(window.API_CONFIG.ENDPOINTS.METRICS, window.API_CONFIG);
 
         if (data) {
             console.log("Dashboard data received:", data);

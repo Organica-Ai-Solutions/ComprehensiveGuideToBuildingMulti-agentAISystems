@@ -424,13 +424,13 @@ document.addEventListener('DOMContentLoaded', () => {
     // Real MCP Status with API data
     async function updateRealMcpDisplay() {
         try {
-            const response = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.METRICS}`, {
-                ...defaultFetchOptions,
-                method: 'GET'
+            // Use apiCall instead of direct fetch to ensure API key is included
+            const response = await apiCall(API_CONFIG.ENDPOINTS.METRICS, API_CONFIG, { 
+                method: 'GET' 
             });
-            if (!response.ok) throw new Error('Failed to fetch metrics');
+            // Assuming apiCall returns { data, status } structure
+            const metrics = response.data; 
             
-            const metrics = await response.json();
             if (!metrics || !metrics.mcp) return;
             
             // Update MCP metrics display
