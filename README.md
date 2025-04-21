@@ -88,9 +88,14 @@ flowchart LR
     end
 
     subgraph Agent System
+        AgentEntryPoint{Agent Entry}
         RA[Research Agent]
         CA[Coder Agent]
         Tools[Tool Registry]
+        AgentEntryPoint --> RA
+        AgentEntryPoint --> CA
+        RA --> Tools
+        CA --> Tools
     end
 
     subgraph Processing
@@ -101,9 +106,9 @@ flowchart LR
 
     Chat -->|User Input| Val
     Val -->|Validated| Safety
-    Safety -->|Safe Input| Agent System
-    Agent System -->|Using| Tools
-    Agent System -->|Response| History
+    Safety -->|Safe Input| AgentEntryPoint
+    RA -->|Response| History
+    CA -->|Response| History
     History -->|Update| Status
     Status -->|Display| Chat
 ```
