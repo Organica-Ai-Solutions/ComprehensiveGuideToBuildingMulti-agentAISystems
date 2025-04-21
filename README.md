@@ -300,3 +300,34 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
+
+## MPC Integration Architecture
+
+To enhance the privacy and security of sensitive operations like tool calls and agent interactions, this system can integrate Multi-Party Computation (MPC) using the CrypTen library. The proposed architecture involves the existing Frontend and Backend components, along with a dedicated MPC Server.
+
+**Components:**
+
+*   **Frontend UI (JS):** The user interface running in the browser.
+*   **Backend API Server (FastAPI, Python):** The main server handling API requests, WebSocket connections, and standard logic. It also acts as a participant in the MPC protocol.
+*   **Dedicated MPC Server (Python/CrypTen):** A separate server process responsible for participating in the CrypTen MPC computations.
+*   **MPC Coordination Logic (Backend):** Handles the setup, initiation, and result retrieval of MPC sessions.
+
+**Conceptual Flow Diagram:**
+
+<p align="center">
+  <img src="images/servers.png" alt="MPC Integration Architecture Diagram" width="700">
+</p>
+
+**Explanation of the Secure Flow:**
+
+1.  The User interacts with the Frontend UI.
+2.  For actions requiring secure computation, the Frontend JS sends a request to a designated endpoint on the Backend API server.
+3.  The Backend API server receives the request and triggers its MPC Coordination Logic.
+4.  The Coordination Logic initiates an MPC session using CrypTen, involving itself (as one party) and the dedicated MPC Server (as the other party/parties). The frontend's private input is securely incorporated.
+5.  The Backend MPC Participant and the MPC Server(s) perform the secure computation using CrypTen's protocols.
+6.  Once the MPC protocol completes, the secure result is available to the participating parties (primarily the Backend).
+7.  The MPC Coordination logic provides the secure result back to the main Backend API logic.
+8.  The Backend API server then proceeds with the non-sensitive part of the action (e.g., executing the tool using the secure result).
+9.  Finally, the Backend sends the final response back to the Frontend UI.
+
+This architecture allows leveraging CrypTen's capabilities for specific sensitive computations while keeping the main application flow intact for standard operations.
